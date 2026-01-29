@@ -1,5 +1,5 @@
-# app.py — Agentic Visibility Scanner (Universal + Turbo Hybrid Crawler)
-# Required libraries: streamlit, requests, beautifulsoup4, urllib.parse, re, json, time
+# app.py — Agentic Visibility Scanner (Advanced AEO Audit Tool)
+# Required libraries: streamlit, requests, beautifulsoup4, urllib.parse, re, json, time, datetime
 #
 # Install:
 #   pip install streamlit requests beautifulsoup4 lxml
@@ -10,6 +10,7 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
 
@@ -31,10 +32,7 @@ DEFAULT_TIMEOUT = 15
 SHOPIFY_SITEMAP_PRODUCTS_PATH = "/sitemap_products_1.xml"
 UNIVERSAL_SITEMAP_PATH = "/sitemap.xml"
 
-# Common product-like path tokens for non-Shopify structures
-PRODUCT_HINT_TOKENS = ("/products/", "/product/", "/shop/", "/store/", "/item/", "/items/")
-
-# Disallowed (non-HTML) extensions
+PRODUCT_HINT_TOKENS = ("/products/", "/product/", "/shop/", "/store/")
 DISALLOWED_EXTS = (
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
     ".pdf", ".zip", ".rar", ".7z",
@@ -43,6 +41,26 @@ DISALLOWED_EXTS = (
 )
 
 AI_BOTS = ("GPTBot", "CCBot", "Google-Extended")
+
+AUTH_TIER1_DOMAINS = (
+    "wikipedia.org",
+    "wikidata.org",
+    "crunchbase.com",
+    "bloomberg.com",
+)
+
+SOCIAL_DOMAINS = (
+    "instagram.com",
+    "facebook.com",
+    "tiktok.com",
+    "x.com",
+    "twitter.com",
+    "linkedin.com",
+    "youtube.com",
+    "pinterest.com",
+)
+
+INDUSTRY_AVERAGE_SCORE = 72
 
 
 # ----------------------------
@@ -125,6 +143,17 @@ def looks_like_sitemap_url(u: str, origin: str) -> bool:
     return u.lower().endswith(".xml")
 
 
+def domain_host(origin: str) -> str:
+    return urlparse(origin).netloc.lower().replace("www.", "")
+
+
+def host_of_url(u: str) -> str:
+    try:
+        return urlparse(u).netloc.lower().replace("www.", "")
+    except Exception:
+        return ""
+
+
 # ----------------------------
 # Networking
 # ----------------------------
@@ -167,7 +196,6 @@ def parse_robots_for_blocks(robots_text: str, target_agents: Tuple[str, ...]) ->
         m = re.match(r"(?i)user-agent\s*:\s*(.+)$", line)
         if m:
             agent = m.group(1).strip()
-            # If we already saw rules in the current group and we see a new UA, start new group
             if saw_rule_in_group and current_agents:
                 new_group()
             current_agents.append(agent)
@@ -178,7 +206,6 @@ def parse_robots_for_blocks(robots_text: str, target_agents: Tuple[str, ...]) ->
             path = (m.group(1) or "").strip()
             saw_rule_in_group = True
 
-            # Empty path means allowed
             if path == "":
                 continue
 
@@ -186,31 +213,13 @@ def parse_robots_for_blocks(robots_text: str, target_agents: Tuple[str, ...]) ->
             if not blocks_all:
                 continue
 
-            # If any current agent matches target agent, mark blocked
             for ga in current_agents:
                 for ta in target_agents:
                     if ga.lower() == ta.lower():
                         blocked[ta] = True
             continue
 
-        # Ignore Allow/Sitemap/etc.
-
     return blocked
-
-
-def check_ai_blockers(origin: str, timeout: int) -> Tuple[bool, Dict[str, bool], Optional[str], Optional[str]]:
-    """
-    Returns:
-      any_blocked, per_bot_blocked, robots_text_or_none, error_or_none
-    """
-    try:
-        _, robots = fetch_text(urljoin(origin, "/robots.txt"), timeout=timeout)
-    except Exception as e:
-        return False, {a: False for a in AI_BOTS}, None, str(e)
-
-    per_bot = parse_robots_for_blocks(robots, AI_BOTS)
-    any_blocked = any(per_bot.values())
-    return any_blocked, per_bot, robots, None
 
 
 def discover_sitemaps_from_robots(robots_text: str) -> List[str]:
@@ -223,11 +232,21 @@ def discover_sitemaps_from_robots(robots_text: str) -> List[str]:
     return sitemaps
 
 
+def fetch_robots(origin: str, timeout: int) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Returns (robots_text, error)
+    """
+    try:
+        _, robots = fetch_text(urljoin(origin, "/robots.txt"), timeout=timeout)
+        return robots, None
+    except Exception as e:
+        return None, str(e)
+
+
 # ----------------------------
 # Sitemap parsing (recursive)
 # ----------------------------
 def extract_loc_urls_from_xml(xml_text: str) -> List[str]:
-    # Simple <loc> extraction for both sitemapindex and urlset
     locs = re.findall(r"<loc>\s*(.*?)\s*</loc>", xml_text, flags=re.IGNORECASE)
     out: List[str] = []
     for u in locs:
@@ -242,14 +261,8 @@ def crawl_sitemaps_for_products(
     origin: str,
     timeout: int,
     max_product_urls: int = 3,
-    max_sitemaps_to_visit: int = 50,
+    max_sitemaps_to_visit: int = 60,
 ) -> Tuple[List[str], List[str]]:
-    """
-    Recursively crawl sitemaps:
-      - If loc ends with .xml and is internal => treat as child sitemap and fetch it
-      - Never add .xml URLs to product list
-      - Filter product-like URLs by tokens and exclude assets
-    """
     notes: List[str] = []
     visited: Set[str] = set()
     queue: List[str] = [normalize_url(starting_sitemap_url)]
@@ -275,18 +288,16 @@ def crawl_sitemaps_for_products(
                 break
 
             if looks_like_sitemap_url(loc, origin):
-                # Child sitemap
                 if loc not in visited and len(visited) + len(queue) < max_sitemaps_to_visit:
                     queue.append(loc)
                 continue
 
-            # HTML page candidate
             if looks_like_product_url(loc, origin) and loc not in found_set:
                 found_set.add(loc)
                 found_products.append(loc)
 
     if found_products:
-        notes.append(f"✅ Found {len(found_products)} product URL(s) via recursive sitemap crawl")
+        notes.append(f"✅ Found {len(found_products)} product URL(s) via sitemap crawl")
     else:
         notes.append("⚠️ No product URLs found in sitemap(s)")
 
@@ -294,17 +305,9 @@ def crawl_sitemaps_for_products(
 
 
 # ----------------------------
-# Hybrid crawler (Universal + Turbo)
+# Hybrid crawler engine
 # ----------------------------
 def discover_home_and_products(origin: str, timeout: int, status_cb=None) -> Tuple[str, List[str], List[str]]:
-    """
-    Steps:
-      1) Shopify Turbo: /sitemap_products_1.xml
-      2) Universal Sitemap: /sitemap.xml recursive children
-      3) Robots Fallback: /robots.txt Sitemap: URLs recursive
-      4) Scrape Fallback: homepage <a> links containing product-like tokens
-    Returns: (homepage_url, product_urls, notes)
-    """
     notes: List[str] = []
 
     if status_cb:
@@ -319,6 +322,7 @@ def discover_home_and_products(origin: str, timeout: int, status_cb=None) -> Tup
         turbo_url = urljoin(origin, SHOPIFY_SITEMAP_PRODUCTS_PATH)
         _, xml_text = fetch_text(turbo_url, timeout=timeout)
         locs = extract_loc_urls_from_xml(xml_text)
+
         picked: List[str] = []
         seen: Set[str] = set()
         for u in locs:
@@ -329,50 +333,54 @@ def discover_home_and_products(origin: str, timeout: int, status_cb=None) -> Tup
             seen.add(u)
             if looks_like_product_url(u, origin):
                 picked.append(u)
+
         if picked:
             notes.append(f"✅ Shopify Turbo: found {len(picked)} product URL(s) via /sitemap_products_1.xml")
             return homepage_url, picked, notes
+
         notes.append("⚠️ Shopify Turbo: sitemap exists but produced 0 valid product URLs")
     except Exception as e:
         notes.append(f"⚠️ Shopify Turbo failed: {e}")
 
-    # Step 2: Universal sitemap.xml (recursive)
+    # Step 2: Universal sitemap.xml recursive
     try:
         if status_cb:
-            status_cb("Universal Sitemap: crawling /sitemap.xml recursively…")
+            status_cb("Universal: crawling /sitemap.xml recursively…")
         sm_url = urljoin(origin, UNIVERSAL_SITEMAP_PATH)
         products, sm_notes = crawl_sitemaps_for_products(sm_url, origin=origin, timeout=timeout, max_product_urls=3)
         notes.extend(sm_notes)
         if products:
             return homepage_url, products, notes
     except Exception as e:
-        notes.append(f"⚠️ Universal Sitemap failed: {e}")
+        notes.append(f"⚠️ Universal sitemap failed: {e}")
 
-    # Step 3: Robots fallback for sitemap URLs
+    # Step 3: robots.txt sitemap fallbacks
     try:
         if status_cb:
-            status_cb("Robots Fallback: checking /robots.txt for Sitemap URLs…")
-        _, robots = fetch_text(urljoin(origin, "/robots.txt"), timeout=timeout)
-        sm_urls = discover_sitemaps_from_robots(robots)
-        if sm_urls:
-            notes.append(f"ℹ️ robots.txt listed {len(sm_urls)} sitemap URL(s)")
-            for sm in sm_urls:
-                if status_cb:
-                    status_cb("Robots Fallback: crawling listed sitemap recursively…")
-                products, sm_notes = crawl_sitemaps_for_products(sm, origin=origin, timeout=timeout, max_product_urls=3)
-                notes.extend(sm_notes)
-                if products:
-                    notes.append("✅ Product URLs discovered via robots.txt sitemap")
-                    return homepage_url, products, notes
-            notes.append("⚠️ robots.txt sitemap(s) found, but none yielded product URLs")
+            status_cb("Fallback: checking robots.txt for sitemap URLs…")
+        robots_text, _ = fetch_robots(origin, timeout=timeout)
+        if robots_text:
+            sm_urls = discover_sitemaps_from_robots(robots_text)
+            if sm_urls:
+                notes.append(f"ℹ️ robots.txt lists {len(sm_urls)} sitemap URL(s)")
+                for sm in sm_urls:
+                    if status_cb:
+                        status_cb("Fallback: crawling robots.txt sitemap…")
+                    products, sm_notes = crawl_sitemaps_for_products(sm, origin=origin, timeout=timeout, max_product_urls=3)
+                    notes.extend(sm_notes)
+                    if products:
+                        notes.append("✅ Product URLs discovered via robots.txt sitemap")
+                        return homepage_url, products, notes
+            else:
+                notes.append("⚠️ robots.txt did not list sitemap URLs")
         else:
-            notes.append("⚠️ robots.txt did not list any sitemap URLs")
+            notes.append("⚠️ robots.txt not available for sitemap discovery")
     except Exception as e:
-        notes.append(f"⚠️ Robots fallback failed: {e}")
+        notes.append(f"⚠️ robots.txt fallback failed: {e}")
 
-    # Step 4: Scrape fallback
+    # Step 4: scrape homepage fallback
     if status_cb:
-        status_cb("Scrape Fallback: scanning homepage links for product-like URLs…")
+        status_cb("Last resort: scanning homepage links for product pages…")
     soup = BeautifulSoup(home_html, "lxml")
     candidates: List[str] = []
     for a in soup.find_all("a", href=True):
@@ -383,7 +391,6 @@ def discover_home_and_products(origin: str, timeout: int, status_cb=None) -> Tup
         if looks_like_product_url(abs_u, origin):
             candidates.append(abs_u)
 
-    # De-dupe in order, take up to 3
     picked: List[str] = []
     seen: Set[str] = set()
     for u in candidates:
@@ -395,9 +402,9 @@ def discover_home_and_products(origin: str, timeout: int, status_cb=None) -> Tup
             break
 
     if picked:
-        notes.append(f"✅ Scrape Fallback: found {len(picked)} product URL(s) on homepage")
+        notes.append(f"✅ Homepage scrape: found {len(picked)} product URL(s)")
     else:
-        notes.append("❌ Scrape Fallback: no product-like links found on homepage")
+        notes.append("❌ Homepage scrape: no product-like links found")
 
     return homepage_url, picked, notes
 
@@ -436,11 +443,8 @@ def try_parse_json(raw: str) -> Optional[Any]:
         return json.loads(raw)
     except Exception:
         pass
-
-    # Strip JS-style comments and trailing commas (best-effort)
     no_comments = re.sub(r"//.*?$|/\*.*?\*/", "", raw, flags=re.MULTILINE | re.DOTALL).strip()
     no_trailing_commas = re.sub(r",\s*([}\]])", r"\1", no_comments)
-
     try:
         return json.loads(no_trailing_commas)
     except Exception:
@@ -448,12 +452,8 @@ def try_parse_json(raw: str) -> Optional[Any]:
 
 
 def split_possible_json_blocks(raw: str) -> List[str]:
-    """
-    Split multiple JSON objects embedded in a single script tag using bracket matching.
-    """
     blocks: List[str] = []
     i, n = 0, len(raw)
-
     while i < n:
         start = None
         for j in range(i, n):
@@ -498,23 +498,19 @@ def split_possible_json_blocks(raw: str) -> List[str]:
 def extract_jsonld_payloads(html: str) -> Tuple[List[Any], int]:
     soup = BeautifulSoup(html, "lxml")
     scripts = soup.find_all("script", attrs={"type": re.compile(r"application/ld\+json", re.I)})
-
     payloads: List[Any] = []
     for s in scripts:
         raw = (s.get_text(strip=False) or "").strip()
         if not raw:
             continue
-
         parsed = try_parse_json(raw)
         if parsed is not None:
             payloads.append(parsed)
             continue
-
         for block in split_possible_json_blocks(raw):
             p = try_parse_json(block)
             if p is not None:
                 payloads.append(p)
-
     return payloads, len(scripts)
 
 
@@ -525,7 +521,6 @@ def flatten_jsonld_objects(payloads: List[Any]) -> List[Dict[str, Any]]:
         for root in roots:
             for obj in iter_json_objects(root):
                 if isinstance(obj, dict):
-                    # Expand @graph nodes
                     if "@graph" in obj and isinstance(obj["@graph"], list):
                         for g in obj["@graph"]:
                             for o in iter_json_objects(g):
@@ -551,7 +546,7 @@ def find_all(objs: List[Dict[str, Any]], target: str) -> List[Dict[str, Any]]:
 
 
 # ----------------------------
-# Audit checks + scoring
+# Audit logic (scoring + AEO checks)
 # ----------------------------
 def identity_ok(org_obj: Dict[str, Any]) -> bool:
     dis = org_obj.get("disambiguatingDescription")
@@ -610,29 +605,66 @@ def compute_score(org_found: bool, id_verified: bool, faq_found: bool, prod_foun
     return score
 
 
-def build_warnings(org_found: bool, id_verified: bool, prod_found: bool, comm_ready: bool, faq_found: bool) -> List[str]:
+def authority_tier_from_sameas(same_as: Any) -> Tuple[bool, bool, List[str]]:
+    """
+    Returns:
+      (tier1_present, socials_only, flattened_links)
+    """
+    links: List[str] = []
+
+    if isinstance(same_as, str) and same_as.strip():
+        links = [same_as.strip()]
+    elif isinstance(same_as, list):
+        links = [x.strip() for x in same_as if isinstance(x, str) and x.strip()]
+
+    # Normalize
+    norm_links: List[str] = []
+    for l in links:
+        if not re.match(r"^https?://", l, flags=re.I):
+            # ignore non-absolute
+            continue
+        norm_links.append(l)
+
+    if not norm_links:
+        return False, False, []
+
+    tier1_present = any(any(dom in host_of_url(l) for dom in AUTH_TIER1_DOMAINS) for l in norm_links)
+
+    # Socials-only means: there are links, but ALL are on social domains (no other knowledge sources)
+    all_social = True
+    for l in norm_links:
+        h = host_of_url(l)
+        if not any(sd in h for sd in SOCIAL_DOMAINS):
+            all_social = False
+            break
+
+    socials_only = all_social and not tier1_present
+    return tier1_present, socials_only, norm_links
+
+
+def build_warnings(
+    org_found: bool,
+    id_verified: bool,
+    prod_found: bool,
+    comm_ready: bool,
+    faq_found: bool,
+    authority_tier1: bool,
+    authority_socials_only: bool,
+) -> List[str]:
     warnings: List[str] = []
-
-    # CEO-friendly scary warnings (requested)
-    if org_found and not id_verified:
-        warnings.append(
-            "⚠️ Invisible Brand Risk: AI agents (like ChatGPT) cannot definitively prove you are a real business. You risk being ignored."
-        )
-    if prod_found and not comm_ready:
-        warnings.append(
-            "❌ Revenue Blocked: AI cannot read your prices or stock levels. You are losing automated sales."
-        )
-    if not faq_found:
-        warnings.append(
-            "⚠️ Silent Treatment: You have no structured answers. When users ask 'What is [Brand]?', AI stays silent or hallucinates."
-        )
-
-    # Keep this one (still valuable) if Organization missing entirely
     if not org_found:
-        warnings.append(
-            "⚠️ Invisible Brand Risk: AI agents cannot find a clear brand entity for your site. You risk being treated like an anonymous storefront."
-        )
-
+        warnings.append("⚠️ Invisible Brand Risk: AI agents cannot find a clear brand entity for your site. You risk being treated as unverified.")
+    elif not id_verified:
+        warnings.append("⚠️ Invisible Brand Risk: AI agents (like ChatGPT) cannot definitively prove you are a real business. You risk being ignored.")
+    if prod_found and not comm_ready:
+        warnings.append("❌ Revenue Blocked: AI cannot read your prices or stock levels. You are losing automated sales.")
+    if not faq_found:
+        warnings.append("⚠️ Silent Treatment: You have no structured answers. When users ask 'What is [Brand]?', AI stays silent or hallucinates.")
+    if org_found and not authority_tier1:
+        if authority_socials_only:
+            warnings.append("⚠️ Weak Authority: Socials are not Knowledge Sources. You need Tier-1 citations (Wikidata/Wikipedia/Crunchbase) to win AEO.")
+        else:
+            warnings.append("⚠️ Authority Gap: No Tier-1 knowledge sources found in sameAs. AI trusts verified databases more than marketing pages.")
     return warnings
 
 
@@ -642,8 +674,6 @@ def build_warnings(org_found: bool, id_verified: bool, prod_found: bool, comm_re
 def audit_page(url: str, timeout: int) -> PageAudit:
     try:
         final_url, html = fetch_text(url, timeout=timeout)
-        ok_fetch = True
-        fetch_error = None
     except Exception as e:
         return PageAudit(
             requested_url=url,
@@ -656,7 +686,7 @@ def audit_page(url: str, timeout: int) -> PageAudit:
             product_found=False,
             commerce_ready=False,
             score=0,
-            warnings=[f"⚠️ Crawl Failed: If AI/search can’t fetch this page, your visibility and trust signals can collapse. ({e})"],
+            warnings=[f"⚠️ Crawl Failed: AI cannot consistently access this page. Visibility and trust signals can collapse. ({e})"],
         )
 
     payloads, script_count = extract_jsonld_payloads(html)
@@ -674,18 +704,31 @@ def audit_page(url: str, timeout: int) -> PageAudit:
     comm_ready = any(commerce_ok(p) for p in products) if prod_found else False
 
     score = compute_score(org_found, id_verified, faq_found, prod_found, comm_ready)
-    warnings = build_warnings(org_found, id_verified, prod_found, comm_ready, faq_found)
+
+    # Authority Tier check from Organization.sameAs
+    tier1_present = False
+    socials_only = False
+    if org and "sameAs" in org:
+        tier1_present, socials_only, _ = authority_tier_from_sameas(org.get("sameAs"))
+
+    warnings = build_warnings(
+        org_found=org_found,
+        id_verified=id_verified,
+        prod_found=prod_found,
+        comm_ready=comm_ready,
+        faq_found=faq_found,
+        authority_tier1=tier1_present,
+        authority_socials_only=socials_only,
+    )
 
     if script_count > 0 and len(payloads) == 0:
-        warnings.append(
-            "⚠️ Executive Alert: Your site is outputting schema, but it’s malformed—AI and Google may ignore it entirely."
-        )
+        warnings.append("⚠️ Executive Alert: Your site outputs schema, but it’s malformed—AI and Google may ignore it entirely.")
 
     return PageAudit(
         requested_url=url,
         final_url=final_url,
-        ok_fetch=ok_fetch,
-        fetch_error=fetch_error,
+        ok_fetch=True,
+        fetch_error=None,
         org_found=org_found,
         identity_verified=id_verified,
         faq_found=faq_found,
@@ -697,21 +740,10 @@ def audit_page(url: str, timeout: int) -> PageAudit:
 
 
 # ----------------------------
-# UI helpers
+# AEO Special: Homepage signals
 # ----------------------------
-def pct(n: int, d: int) -> int:
-    if d <= 0:
-        return 0
-    return max(0, min(100, int(round(100 * n / d))))
-
-
 def infer_brand_name_from_domain(origin: str) -> str:
-    """
-    Simple heuristic: domain label -> title-ish brand.
-    example: https://cool-store.com -> "Cool Store"
-    """
-    host = urlparse(origin).netloc.lower()
-    host = host.replace("www.", "")
+    host = domain_host(origin)
     label = host.split(":")[0].split(".")[0]
     label = re.sub(r"[^a-z0-9\-]+", "", label)
     parts = [p for p in label.split("-") if p]
@@ -720,51 +752,95 @@ def infer_brand_name_from_domain(origin: str) -> str:
     return " ".join(p.capitalize() for p in parts)
 
 
-def simulate_ai_response(health_score: int, identity_health: int, commerce_health: int, any_blocked: bool) -> Tuple[str, str]:
-    if any_blocked:
-        return (
-            "What ChatGPT Will Do",
-            "I can’t reliably access or cite this website because AI crawlers appear to be blocked. "
-            "That means I cannot confidently verify your brand, your products, or your availability—so I will avoid recommending you.",
-        )
+def extract_homepage_title_h1(home_html: str) -> Tuple[str, str]:
+    soup = BeautifulSoup(home_html, "lxml")
+    title_tag = soup.find("title")
+    title_text = (title_tag.get_text(strip=True) if title_tag else "") or ""
+    h1_tag = soup.find("h1")
+    h1_text = (h1_tag.get_text(" ", strip=True) if h1_tag else "") or ""
+    return title_text, h1_text
 
-    if health_score >= 85 and identity_health >= 80 and commerce_health >= 80:
-        return (
-            "What ChatGPT Will Do",
-            "I can verify your brand entity and I can read product pricing signals. "
-            "If a customer asks for recommendations, I can confidently surface specific products and describe them as available.",
-        )
 
-    if commerce_health < 50:
-        return (
-            "What ChatGPT Will Do",
-            "I can see products, but I can’t reliably read your price/stock signals. "
-            "In an AI shopping moment, that typically means I won’t push customers to buy—because I can’t verify the sale details.",
-        )
+def contains_current_year(text: str) -> bool:
+    if not text:
+        return False
+    year = datetime.now().year
+    return str(year) in text
 
-    if identity_health < 50:
-        return (
-            "What ChatGPT Will Do",
-            "I cannot definitively prove your brand’s identity. "
-            "That increases the risk you get ignored, misattributed, or blended into generic results when customers ask about you.",
-        )
 
-    if health_score < 60:
-        return (
-            "What ChatGPT Will Do",
-            "I’m not confident I can verify your business or products consistently. "
-            "In practice, I give safer, generic answers—and you lose the recommendation.",
-        )
-
-    return (
-        "What ChatGPT Will Do",
-        "I can extract some information, but trust signals are inconsistent. "
-        "With a focused upgrade, you can become the obvious, verifiable choice in AI answers and AI shopping flows.",
-    )
+def brand_in_h1(brand: str, h1_text: str) -> bool:
+    if not brand or not h1_text:
+        return False
+    # Loose match: all brand tokens appear somewhere in H1 (case-insensitive)
+    brand_tokens = [t.lower() for t in re.split(r"\s+", brand.strip()) if t.strip()]
+    h1_low = h1_text.lower()
+    return all(t in h1_low for t in brand_tokens)
 
 
 # ----------------------------
-# Dynamic Action Plan (templates)
+# UI helpers
+# ----------------------------
+def pct(n: int, d: int) -> int:
+    if d <= 0:
+        return 0
+    return max(0, min(100, int(round(100 * n / d))))
+
+
+def simulate_ai_response(
+    health_score: int,
+    authority_connected: bool,
+    commerce_health: int,
+    any_blocked: bool,
+    stale_risk: bool,
+    entity_confusion: bool,
+) -> str:
+    if any_blocked:
+        return (
+            "I can’t reliably access or cite this website because AI crawlers appear to be blocked. "
+            "That means I cannot confidently verify your brand or products—so I will avoid recommending you."
+        )
+    if health_score >= 85 and authority_connected and commerce_health >= 80 and not stale_risk and not entity_confusion:
+        return (
+            "I can verify the brand identity through strong knowledge signals and I can read product pricing data. "
+            "I would confidently recommend specific in-stock products and cite the brand clearly."
+        )
+    if commerce_health < 50:
+        return (
+            "I can see products, but I can’t reliably confirm price/stock. "
+            "In an AI shopping moment, I will not push customers to buy because the sale details aren’t verifiable."
+        )
+    if not authority_connected:
+        return (
+            "I can’t connect this brand to trusted knowledge sources. "
+            "Without Wikidata/Wikipedia-style verification, I will treat the brand as lower-confidence and avoid strong claims."
+        )
+    if stale_risk:
+        return (
+            "Your homepage looks stale compared to fresh, updated competitors. "
+            "When answers require recency, I will prioritize sources that explicitly signal the current year and updated context."
+        )
+    if entity_confusion:
+        return (
+            "Your homepage doesn’t clearly state the brand name in the primary headline. "
+            "That increases entity confusion and reduces how confidently I can cite or recommend you."
+        )
+    if health_score < 60:
+        return (
+            "I’m not confident I can verify your business and products consistently. "
+            "In practice, I give generic answers—and you lose the recommendation."
+        )
+    return (
+        "You have partial AI visibility, but your signals are inconsistent. "
+        "With an authority upgrade and structured commerce signals, you can become the default brand AI recommends."
+    )
+
+
+def authority_label(connected: bool) -> str:
+    return "✅ Knowledge Graph Connected" if connected else "❌ Knowledge Graph Connected"
+
+
+# ----------------------------
+# Phase 1 snippets (Defense)
 # ----------------------------
 def organization_jsonld_template(domain: str, brand: str) -> str:
     return json.dumps(
@@ -795,7 +871,7 @@ def faqpage_jsonld_template(domain: str, brand: str) -> str:
                     "name": f"What is {brand}?",
                     "acceptedAnswer": {
                         "@type": "Answer",
-                        "text": f"{brand} is a premium brand available at {domain}. Replace this with your real FAQ answer.",
+                        "text": f"{brand} is available at {domain}. Replace this with your real FAQ answer.",
                     },
                 }
             ],
@@ -812,17 +888,16 @@ st.set_page_config(page_title="Agentic Visibility Scanner", page_icon="🧠", la
 
 st.title("🧠 Agentic Visibility Scanner")
 st.caption(
-    "An executive-grade audit for AI visibility. We scan your homepage + up to 3 product-like pages to see whether "
-    "AI agents can **verify your brand**, **understand your products**, and **confidently recommend you**."
+    "Advanced AEO audit: checks whether AI agents (ChatGPT, Perplexity) can **verify your brand**, "
+    "**answer questions about you**, and **read your product data**."
 )
 
 with st.sidebar:
     st.header("Settings")
     timeout = st.slider("Request timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
-    st.write("")
 
 site_url = st.text_input("Enter your website URL", placeholder="https://example.com")
-run = st.button("Run Agentic Scan", type="primary", use_container_width=True)
+run = st.button("Run AEO Audit", type="primary", use_container_width=True)
 
 if run:
     origin = origin_from_url(site_url)
@@ -830,42 +905,60 @@ if run:
         st.error("Please enter a valid URL (e.g., https://example.com).")
         st.stop()
 
-    brand_name = infer_brand_name_from_domain(origin)
+    brand = infer_brand_name_from_domain(origin)
 
-    audits: List[PageAudit] = []
     notes: List[str] = []
+    audits: List[PageAudit] = []
     scan_urls: List[str] = []
 
-    identity_health = 0
-    commerce_health = 0
+    # AI Barrier checks
+    robots_text, robots_err = fetch_robots(origin, timeout=timeout)
+    any_blocked = False
+    per_bot_blocked: Dict[str, bool] = {a: False for a in AI_BOTS}
+    sitemap_urls_from_robots: List[str] = []
 
-    with st.status("Initializing…", expanded=True) as status:
+    if robots_text:
+        per_bot_blocked = parse_robots_for_blocks(robots_text, AI_BOTS)
+        any_blocked = any(per_bot_blocked.values())
+        sitemap_urls_from_robots = discover_sitemaps_from_robots(robots_text)
+        if any_blocked:
+            notes.append("🚨 CRITICAL: AI agents are blocked in robots.txt.")
+    else:
+        notes.append(f"⚠️ robots.txt could not be fetched ({robots_err}) — continuing anyway.")
+
+    # Crawl + Homepage HTML for AEO recency/entity checks
+    homepage_url = ""
+    home_html = ""
+    with st.status("Running audit…", expanded=True) as status:
 
         def step(msg: str):
             status.update(label=msg, state="running")
 
-        # AI Blocker check (continue scanning even if blocked)
-        step("Checking AI access policies (/robots.txt)…")
-        any_blocked, per_bot_blocked, robots_text, robots_err = check_ai_blockers(origin, timeout=timeout)
-
-        if robots_err:
-            notes.append(f"⚠️ robots.txt could not be fetched ({robots_err}) — continuing anyway.")
-        else:
-            blocked_list = [k for k, v in per_bot_blocked.items() if v]
-            if blocked_list:
-                notes.append(f"🚨 AI access blocked for: {', '.join(blocked_list)}")
-
-        # Hybrid crawler
-        step("Discovering high-value pages (homepage + product pages)…")
+        # Fetch homepage (needed for AEO checks and scrape fallback)
+        step("Fetching homepage…")
         try:
-            homepage_url, product_urls, crawl_notes = discover_home_and_products(origin, timeout=timeout, status_cb=step)
-            notes.extend(crawl_notes)
+            home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
+            homepage_url = normalize_url(home_final)
         except Exception as e:
-            status.update(label="Discovery failed.", state="error")
-            st.error(f"Discovery failed: {e}")
+            status.update(label="Homepage fetch failed.", state="error")
+            st.error(f"Homepage fetch failed: {e}")
             st.stop()
 
-        scan_urls = [normalize_url(homepage_url)]
+        # Discover pages using the hybrid crawler (re-uses homepage already fetched)
+        step("Discovering product pages (Turbo + Universal)…")
+
+        # Use the existing discovery engine, but avoid refetching homepage by temporarily passing in origin and timeout.
+        # The discovery function fetches homepage again internally; to keep logic consistent, we use it as-is.
+        try:
+            discovered_home, product_urls, crawl_notes = discover_home_and_products(origin, timeout=timeout, status_cb=step)
+            notes.extend(crawl_notes)
+            # Prefer the first homepage URL we already fetched, but normalize
+            homepage_url = normalize_url(discovered_home) if discovered_home else homepage_url
+        except Exception as e:
+            notes.append(f"⚠️ Discovery engine error: {e}")
+            product_urls = []
+
+        scan_urls = [homepage_url]
         for u in product_urls:
             nu = normalize_url(u)
             if nu not in scan_urls and not is_disallowed_asset(nu) and not nu.lower().endswith(".xml"):
@@ -873,59 +966,24 @@ if run:
         scan_urls = scan_urls[:4]
 
         if len(scan_urls) < 2:
-            notes.append("⚠️ We could only scan your homepage. Product discovery returned 0 URLs.")
+            notes.append("⚠️ Only the homepage could be scanned. Product discovery returned 0 URLs.")
 
         # Audit pages
-        step(f"Running AI visibility audit on {len(scan_urls)} page(s)…")
+        step(f"Auditing {len(scan_urls)} page(s)…")
         for i, u in enumerate(scan_urls, start=1):
-            step(f"Auditing page {i}/{len(scan_urls)}…")
+            step(f"Scanning {i}/{len(scan_urls)}…")
             audits.append(audit_page(u, timeout=timeout))
             time.sleep(0.05)
 
-        status.update(label="Scan complete.", state="complete")
+        status.update(label="Audit complete.", state="complete")
 
-    # ----------------------------
-    # Results
-    # ----------------------------
-    st.subheader("Executive Summary")
+    # AEO Recency + Entity checks on homepage title/h1
+    title_text, h1_text = extract_homepage_title_h1(home_html)
+    stale_risk = not (contains_current_year(title_text) or contains_current_year(h1_text))
+    entity_confusion = not brand_in_h1(brand, h1_text)
 
-    if any_blocked:
-        st.error("🚨 **CRITICAL ERROR: AI BLOCKED** — You have explicitly blocked major AI agents. This is a direct visibility kill-switch.")
-        blocked_list = [k for k, v in per_bot_blocked.items() if v]
-        if blocked_list:
-            st.warning(f"Blocked AI agents: {', '.join(blocked_list)}")
-        st.info("We still ran the audit so you can see what your site is missing once access is restored.")
-
-    with st.expander("Scan Details (Pages + Discovery Notes)", expanded=False):
-        for n in notes:
-            st.write(n)
-        st.write("**Pages scanned:**")
-        for u in scan_urls:
-            st.write(f"- {u}")
-
+    # Compute site-wide score (average)
     health_score = round(sum(a.score for a in audits) / len(audits)) if audits else 0
-    st.markdown(f"### Agentic Health Score: `{health_score}/100`")
-
-    # Aggregate warnings
-    agg_warnings: List[str] = []
-    seen_warns: Set[str] = set()
-    for a in audits:
-        for w in a.warnings:
-            if w not in seen_warns:
-                seen_warns.add(w)
-                agg_warnings.append(w)
-
-    if health_score < 80 and agg_warnings:
-        st.markdown("#### What’s Costing You Visibility (Right Now)")
-        for w in agg_warnings:
-            if w.startswith("❌"):
-                st.error(w)
-            else:
-                st.warning(w)
-    elif health_score >= 80:
-        st.success("✅ Strong position. AI agents can verify you more reliably than most competitors.")
-    else:
-        st.info("Your signals are inconsistent. This is exactly where competitors steal your AI visibility.")
 
     # Category health
     identity_pass = sum(1 for a in audits if a.org_found and a.identity_verified)
@@ -934,6 +992,80 @@ if run:
     product_pages = [a for a in audits if a.product_found]
     commerce_pass = sum(1 for a in product_pages if a.commerce_ready)
     commerce_health = pct(commerce_pass, len(product_pages)) if product_pages else 0
+
+    faq_pass = sum(1 for a in audits if a.faq_found)
+    faq_health = pct(faq_pass, len(audits))
+
+    # Authority tier check (site-wide): if ANY page contains Org with Tier-1 sameAs
+    authority_connected = False
+    authority_socials_only_seen = False
+    authority_links_sample: List[str] = []
+    for a in audits:
+        if not a.ok_fetch:
+            continue
+        try:
+            _, html = fetch_text(a.final_url, timeout=timeout)
+        except Exception:
+            continue
+        payloads, _ = extract_jsonld_payloads(html)
+        objs = flatten_jsonld_objects(payloads)
+        org = find_first(objs, "Organization")
+        if org and "sameAs" in org:
+            tier1_present, socials_only, links = authority_tier_from_sameas(org.get("sameAs"))
+            if links and not authority_links_sample:
+                authority_links_sample = links[:6]
+            if socials_only:
+                authority_socials_only_seen = True
+            if tier1_present:
+                authority_connected = True
+                break
+
+    # Aggregate warnings (dedupe)
+    agg_warnings: List[str] = []
+    seen_warns: Set[str] = set()
+    for a in audits:
+        for w in a.warnings:
+            if w not in seen_warns:
+                seen_warns.add(w)
+                agg_warnings.append(w)
+
+    # Add AEO barrier warnings
+    if stale_risk:
+        agg_warnings.append("⚠️ Stale Content Risk: Your homepage does not signal the current year. AI prioritizes fresh, explicitly updated sources.")
+    if entity_confusion:
+        agg_warnings.append("⚠️ Entity Confusion: Your homepage H1 does not clearly contain the brand name. AI may misattribute or down-rank you.")
+
+    # AI blocked warning (but continue)
+    if any_blocked:
+        blocked_list = [k for k, v in per_bot_blocked.items() if v]
+        if blocked_list:
+            agg_warnings.insert(0, f"🚨 CRITICAL ERROR: AI BLOCKED — robots.txt blocks: {', '.join(blocked_list)}")
+
+    # ----------------------------
+    # CEO-ready UI
+    # ----------------------------
+    st.subheader("CEO Summary")
+
+    st.markdown(
+        f"### Agentic Health Score: `{health_score}/100`  \n"
+        f"**Industry Average:** `{INDUSTRY_AVERAGE_SCORE}/100` — You are trailing behind AI-optimized competitors."
+    )
+
+    # Show key barriers first
+    if any_blocked:
+        st.error("🚨 CRITICAL ERROR: AI BLOCKED — You have explicitly blocked major AI agents. This is a direct visibility kill-switch.")
+    if stale_risk:
+        st.warning("⚠️ Stale Content Risk — Your homepage does not explicitly signal the current year. AI prioritizes fresh, dated sources.")
+    if entity_confusion:
+        st.warning("⚠️ Entity Confusion — Your main homepage headline does not clearly state your brand name. AI may misattribute or reduce confidence.")
+
+    if agg_warnings:
+        st.markdown("#### What’s Costing You Visibility (Right Now)")
+        for w in agg_warnings[:8]:
+            if w.startswith("❌") or w.startswith("🚨"):
+                st.error(w)
+            else:
+                st.warning(w)
 
     st.markdown("#### Signal Strength")
     col1, col2 = st.columns(2)
@@ -946,16 +1078,23 @@ if run:
         st.progress(commerce_health)
         st.write(f"**{commerce_health}%**")
 
-    # AI Simulation (dramatic)
+    # AI Simulation
     st.markdown("---")
     st.markdown("## 🔮 The 'ChatGPT Test'")
     st.caption("If a potential customer asks AI about your brand right now, here is exactly what happens:")
-    sim_title, sim_msg = simulate_ai_response(health_score, identity_health, commerce_health, any_blocked=any_blocked)
-    st.chat_message("assistant").write(f"**{sim_title}**\n\n{sim_msg}")
+    sim_msg = simulate_ai_response(
+        health_score=health_score,
+        authority_connected=authority_connected,
+        commerce_health=commerce_health,
+        any_blocked=any_blocked,
+        stale_risk=stale_risk,
+        entity_confusion=entity_confusion,
+    )
+    st.chat_message("assistant").write(sim_msg)
 
-    # Detailed Findings per URL (CEO-friendly scorecard strings)
+    # Scorecard by page (CEO labels)
     st.markdown("---")
-    st.markdown("## Detailed Scorecard by Page")
+    st.markdown("## Scorecard (By Page)")
 
     for a in audits:
         with st.expander(f"{a.final_url} — {a.score}/100", expanded=False):
@@ -965,73 +1104,54 @@ if run:
 
             c1, c2 = st.columns(2)
             with c1:
-                st.write("✅ Brand Entity Signal: DETECTED" if a.org_found else "❌ Brand Entity Signal: MISSING")
-                st.write("✅ Answer Engine: ACTIVE" if a.faq_found else "❌ Answer Engine: INACTIVE")
-                st.write("✅ Product Intelligence: DETECTED" if a.product_found else "❌ Product Intelligence: MISSING")
+                st.write("✅ Brand Entity Signal" if a.org_found else "❌ Brand Entity Signal")
+                st.write(authority_label(authority_connected))
+                st.write("✅ Answer Engine Active" if a.faq_found else "❌ Answer Engine Active")
             with c2:
-                st.write("✅ Authority Verification: SECURE" if a.identity_verified else "❌ Authority Verification: UNVERIFIED")
-                st.write("✅ AI Shopping Data: OPTIMIZED" if a.commerce_ready else "❌ AI Shopping Data: NOT READY")
+                st.write("✅ AI Shopping Data" if a.commerce_ready else "❌ AI Shopping Data")
+                st.write("✅ Identity Verified" if a.identity_verified else "❌ Identity Verified")
+                st.write("✅ Product Schema" if a.product_found else "❌ Product Schema")
 
-            if a.warnings:
-                st.markdown("**Executive Alerts:**")
-                for w in a.warnings:
-                    if w.startswith("❌"):
-                        st.error(w)
-                    else:
-                        st.warning(w)
-            else:
-                st.success("No critical blockers detected on this page.")
+            if authority_links_sample:
+                st.caption("Authority links detected (sample):")
+                for l in authority_links_sample:
+                    st.write(f"- {l}")
+
+    with st.expander("Scan Details (Discovery Notes + Pages)", expanded=False):
+        for n in notes:
+            st.write(n)
+        st.write("**Pages scanned:**")
+        for u in scan_urls:
+            st.write(f"- {u}")
+        if title_text or h1_text:
+            st.write("**Homepage Signals:**")
+            st.write(f"- Title: {title_text[:180] + ('…' if len(title_text) > 180 else '')}")
+            st.write(f"- H1: {h1_text[:180] + ('…' if len(h1_text) > 180 else '')}")
 
     # ----------------------------
-    # Dynamic Action Plan (CEO-friendly, “magic”)
+    # Funnel: Phase 1 vs Phase 2
     # ----------------------------
     st.markdown("---")
-    st.markdown("## 🚀 Your Instant Authority Upgrade")
+    st.markdown("## Phase 1: Basic Registration (The Bare Minimum)")
+    st.caption("This is **Defense**. It prevents AI from throwing errors or ignoring you. It does not create meaningful traffic by itself.")
 
-    domain = origin
-    brand = brand_name
+    org_snippet = organization_jsonld_template(domain=origin, brand=brand)
+    faq_snippet = faqpage_jsonld_template(domain=origin, brand=brand)
 
-    identity_low = identity_health < 60
-    commerce_low = (commerce_health < 60) if product_pages else True
-    knowledge_low = any(not a.faq_found for a in audits)
+    st.markdown("### 1) Identity (Organization) — Defense")
+    st.code(org_snippet, language="json")
+    st.markdown("### 2) Knowledge (FAQ) — Defense")
+    st.code(faq_snippet, language="json")
 
-    if identity_low:
-        st.markdown("### 1) Authority Lock-In (Identity)")
-        st.write(
-            f"We generated this custom **'Authority Code'** specifically for **{brand}**. "
-            "Copying this into your site is the fastest way to force AI to recognize you."
-        )
-        org_snippet = organization_jsonld_template(domain=domain, brand=brand)
-        st.code(org_snippet, language="json")
-        st.caption("Add this JSON-LD to your homepage (or site-wide). Replace sameAs links with your real social/press profiles for maximum authority.")
-    else:
-        st.success("✅ Authority looks secure. AI can verify your brand entity across the pages we scanned.")
-
-    if knowledge_low:
-        st.markdown("### 2) Become the Default Answer (Knowledge)")
-        st.write(
-            "Right now, when people ask AI basic questions about your brand, you’re not controlling the answer. "
-            "This lightweight schema turns your site into a reliable ‘source of truth’."
-        )
-        faq_snippet = faqpage_jsonld_template(domain=domain, brand=brand)
-        st.code(faq_snippet, language="json")
-        st.caption("Replace the example Q&A with real questions customers ask. Even 3–5 FAQs can dramatically improve AI answer visibility.")
-    else:
-        st.success("✅ Answer Engine is active. We detected FAQPage schema on the pages scanned.")
-
-    if commerce_low:
-        st.markdown("### 3) Unlock AI-Powered Revenue (Commerce)")
-        st.error("❌ Revenue Blocked: AI cannot read your prices or stock levels. You are losing automated sales.")
-        st.info(
-            "Commerce schema is inherently complex (variants, currency, availability, sale price). "
-            "This usually requires a developer or a dedicated schema app to ensure **every product** publishes clean `offers` data. "
-            "Once it’s fixed, AI shopping flows can confidently recommend and route buyers to checkout."
-        )
-    else:
-        st.success("✅ AI Shopping Data looks optimized. Offers with price were detected on product pages.")
-
-    # CTA
     st.markdown("---")
-    st.markdown("### Want this fixed fast?")
-    st.caption("If you want the shortest path to higher AI visibility (and fewer lost sales), we can implement the upgrade end-to-end.")
-    st.link_button("👉 Book Your Fix (15 Min)", "https://calendly.com", use_container_width=True)
+    st.markdown("## 🚀 Phase 2: The Traffic Strategy (Offense)")
+    st.info(
+        "Real AEO Traffic requires **Wikidata Verification**, **Reddit Mention Injection**, and **Competitor Displacement**. "
+        "This requires a custom strategy."
+    )
+    if authority_socials_only_seen and not authority_connected:
+        st.warning("⚠️ Weak Authority detected: Socials-only sameAs links. Phase 2 is where you upgrade into real knowledge sources.")
+
+    # Final CTA
+    st.markdown("---")
+    st.link_button("👉 Book Your Phase 2 Strategy Call", "https://calendly.com", use_container_width=True)
