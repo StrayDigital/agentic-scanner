@@ -1,9 +1,6 @@
-from streamlit_extras.metric_cards import style_metric_cards
-# app.py — Agentic Infrastructure Audit (WordLift-style Deep Tech + Insight Card Grid)
-# Dependencies: streamlit, requests, beautifulsoup4, urllib.parse, re, json, time, datetime
-#
-# Install:
-#   pip install streamlit requests beautifulsoup4 lxml
+# app.py — Agentic Infrastructure Audit (PageSpeed-style, clean white UI)
+# Requirements:
+#   pip install streamlit requests beautifulsoup4 lxml streamlit-extras
 # Run:
 #   streamlit run app.py
 
@@ -11,23 +8,23 @@ import json
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
 
 import requests
 import streamlit as st
 from bs4 import BeautifulSoup
+from streamlit_extras.metric_cards import style_metric_cards
 
 
 # ----------------------------
-# PAGE CONFIG
+# Page config (native, clean, high-contrast)
 # ----------------------------
-st.set_page_config(page_title="Agentic Infrastructure Audit", page_icon="🧠", layout="centered")
+st.set_page_config(page_title="Agentic Infrastructure Audit", page_icon="📈", layout="centered")
 
 
 # ----------------------------
-# CONFIG
+# Config
 # ----------------------------
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -47,20 +44,23 @@ DISALLOWED_EXTS = (
     ".css", ".js", ".json", ".xml",
 )
 
-# Extended robots checks
-AI_BOTS_EXTENDED = ("GPTBot", "CCBot", "Google-Extended", "anthropic-ai", "Claude-Web")
-
-AUTH_TIER1_DOMAINS = (
-    "wikipedia.org",
-    "wikidata.org",
-    "crunchbase.com",
+# For "Trust & Entity": socials are weak vs tier1, but requested is socials/sameAs detection
+SOCIAL_DOMAINS = (
+    "instagram.com",
+    "facebook.com",
+    "tiktok.com",
+    "x.com",
+    "twitter.com",
+    "youtube.com",
+    "linkedin.com",
 )
 
-INDUSTRY_AVERAGE_SCORE = 72
+# Ghost code threshold
+GHOST_TEXT_MIN = 600
 
 
 # ----------------------------
-# DATA
+# Data models
 # ----------------------------
 @dataclass
 class PageAudit:
@@ -69,90 +69,52 @@ class PageAudit:
     ok_fetch: bool
     fetch_error: Optional[str]
 
+    score: int
+
     org_found: bool
     identity_verified: bool
     faq_found: bool
     product_found: bool
     commerce_ready: bool
 
-    score: int
-    warnings: List[str]
-
-    raw_kb: float
-    text_len: int
     ghost: bool
+    text_len: int
+    html_len: int
+    semantic_density: float
 
-    # page-level semantic checks (best-effort)
-    h1_present: bool
+    h1_text: str
     h1_has_brand: bool
 
-    # deep tech metrics
-    semantic_density_pct: float
-    h2_count: int
-    h3_count: int
-    img_count: int
-    img_missing_alt_count: int
-    img_missing_alt_examples: List[str]
+    schema_types_found: Set[str]
 
 
 @dataclass
-class SiteDeepTech:
-    llms_txt_accessible: bool
-    llms_txt_error: Optional[str]
-
-    robots_access: bool
-    robots_error: Optional[str]
-    any_ai_blocked: bool
-    per_bot_blocked: Dict[str, bool]
-
-    sitemap_found_products: bool
-    sitemap_notes: List[str]
-
-    title_text: str
-    h1_text: str
-    recency_pass: bool
-    entity_pass_home: bool
-
-    authority_pass_any: bool
-    org_seen_any: bool
-
-    ghost_driver: bool
-    trust_driver_fail: bool
-
-    # aggregated deep tech
-    avg_semantic_density_pct: float
-    total_imgs: int
-    total_missing_alt: int
-    top_missing_alt_filenames: List[str]
-
-    # heading structure (homepage)
-    home_h2_count: int
-    home_h3_count: int
-
-    # scanned pages metadata
-    pages_scanned: int
-
-
-@dataclass
-class SiteAuditResult:
+class SiteAudit:
     origin: str
     brand: str
     homepage_url: str
     scan_urls: List[str]
-    audits: List[PageAudit]
-    deep: SiteDeepTech
+    notes: List[str]
+    pages: List[PageAudit]
 
+    # AI Access insight
+    robots_accessible: bool
+    robots_error: Optional[str]
+    llms_txt_present: bool
+    llms_txt_error: Optional[str]
+
+    # Visual semantics insight (aggregated across scanned pages)
+    img_total: int
+    img_missing_alt: int
+    img_missing_alt_examples: List[str]
+
+    # Trust & Entity insight (aggregated across scanned pages)
     org_present_any: bool
-    product_present_any: bool
-    faq_present_any: bool
-    commerce_ready_any: bool
-
-    health_score: int
-    leakage_pct: int
+    sameas_social_links: List[str]
 
 
 # ----------------------------
-# URL HELPERS
+# URL helpers
 # ----------------------------
 def ensure_scheme(u: str) -> str:
     u = (u or "").strip()
@@ -186,7 +148,7 @@ def is_internal(u: str, origin: str) -> bool:
 
 
 def is_disallowed_asset(u: str) -> bool:
-    low = u.lower()
+    low = (u or "").lower()
     return any(low.endswith(ext) for ext in DISALLOWED_EXTS)
 
 
@@ -202,42 +164,37 @@ def looks_like_product_url(u: str, origin: str) -> bool:
     return any(tok in low for tok in PRODUCT_HINT_TOKENS)
 
 
-def looks_like_sitemap_url(u: str, origin: str) -> bool:
-    if not u:
-        return False
-    u = normalize_url(u)
-    if not is_internal(u, origin):
-        return False
-    return u.lower().endswith(".xml")
-
-
-def domain_host(origin: str) -> str:
-    return urlparse(origin).netloc.lower().replace("www.", "")
-
-
-def host_of_url(u: str) -> str:
-    try:
-        return urlparse(u).netloc.lower().replace("www.", "")
-    except Exception:
-        return ""
-
-
 def extract_filename_from_src(src: str) -> str:
     if not src:
-        return ""
-    # Remove query strings
+        return "(no-src)"
     try:
-        path = urlparse(src).path
-        if not path:
-            path = src.split("?", 1)[0].split("#", 1)[0]
+        path = urlparse(src).path or src.split("?", 1)[0].split("#", 1)[0]
         name = path.rstrip("/").split("/")[-1]
         return name or src[:40]
     except Exception:
         return src[:40]
 
 
+def infer_brand_name(origin: str) -> str:
+    host = urlparse(origin).netloc.lower().replace("www.", "")
+    label = host.split(":")[0].split(".")[0]
+    label = re.sub(r"[^a-z0-9\-]+", "", label)
+    parts = [p for p in label.split("-") if p]
+    if not parts:
+        return "Your Brand"
+    return " ".join(p.capitalize() for p in parts)
+
+
+def brand_in_h1(brand: str, h1_text: str) -> bool:
+    if not brand or not h1_text:
+        return False
+    tokens = [t.lower() for t in re.split(r"\s+", brand.strip()) if t.strip()]
+    h = h1_text.lower()
+    return all(t in h for t in tokens)
+
+
 # ----------------------------
-# NETWORKING
+# Networking
 # ----------------------------
 def fetch_text(url: str, timeout: int) -> Tuple[str, str]:
     headers = {"User-Agent": USER_AGENT}
@@ -246,217 +203,50 @@ def fetch_text(url: str, timeout: int) -> Tuple[str, str]:
     return r.url, r.text
 
 
-# ----------------------------
-# ROBOTS / AI BLOCKING (Extended)
-# ----------------------------
-def parse_robots_for_blocks(robots_text: str, target_agents: Tuple[str, ...]) -> Dict[str, bool]:
-    blocked = {a: False for a in target_agents}
-    current_agents: List[str] = []
-    saw_rule_in_group = False
-
-    def new_group():
-        nonlocal current_agents, saw_rule_in_group
-        current_agents = []
-        saw_rule_in_group = False
-
-    for raw_line in robots_text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "#" in line:
-            line = line.split("#", 1)[0].strip()
-            if not line:
-                continue
-
-        m = re.match(r"(?i)user-agent\s*:\s*(.+)$", line)
-        if m:
-            agent = m.group(1).strip()
-            if saw_rule_in_group and current_agents:
-                new_group()
-            current_agents.append(agent)
-            continue
-
-        m = re.match(r"(?i)disallow\s*:\s*(.*)$", line)
-        if m:
-            path = (m.group(1) or "").strip()
-            saw_rule_in_group = True
-            if path == "":
-                continue
-            blocks_all = path == "/" or path == "/*"
-            if not blocks_all:
-                continue
-            for ga in current_agents:
-                for ta in target_agents:
-                    if ga.lower() == ta.lower():
-                        blocked[ta] = True
-            continue
-
-    return blocked
-
-
-def discover_sitemaps_from_robots(robots_text: str) -> List[str]:
-    sitemaps: List[str] = []
-    for line in robots_text.splitlines():
-        if line.strip().lower().startswith("sitemap:"):
-            sm = line.split(":", 1)[1].strip()
-            if sm:
-                sitemaps.append(sm)
-    return sitemaps
-
-
-def fetch_robots(origin: str, timeout: int) -> Tuple[Optional[str], Optional[str]]:
+def safe_fetch_text(url: str, timeout: int) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     try:
-        _, robots = fetch_text(urljoin(origin, "/robots.txt"), timeout=timeout)
-        return robots, None
+        final_url, text = fetch_text(url, timeout)
+        return final_url, text, None
     except Exception as e:
-        return None, str(e)
+        return None, None, str(e)
 
 
 # ----------------------------
-# llms.txt detection
-# ----------------------------
-def fetch_llms_txt(origin: str, timeout: int) -> Tuple[bool, Optional[str]]:
-    try:
-        _, txt = fetch_text(urljoin(origin, "/llms.txt"), timeout=timeout)
-        # Consider accessible if it returns content and isn't a HTML error page masquerading
-        if txt and len(txt.strip()) > 10 and "<html" not in txt.lower():
-            return True, None
-        # If it exists but empty, treat as missing (high impact)
-        return False, "llms.txt returned empty or non-text content."
-    except Exception as e:
-        return False, str(e)
-
-
-# ----------------------------
-# SITEMAP (RECURSIVE)
+# Sitemap helpers
 # ----------------------------
 def extract_loc_urls_from_xml(xml_text: str) -> List[str]:
     locs = re.findall(r"<loc>\s*(.*?)\s*</loc>", xml_text, flags=re.IGNORECASE)
-    out: List[str] = []
+    return [normalize_url(u.strip()) for u in locs if (u or "").strip()]
+
+
+def crawl_sitemap_for_products(sitemap_url: str, origin: str, timeout: int, limit: int = 3) -> Tuple[List[str], List[str]]:
+    notes: List[str] = []
+    found: List[str] = []
+    seen: Set[str] = set()
+
+    final, xml, err = safe_fetch_text(sitemap_url, timeout)
+    if err or not xml:
+        notes.append(f"⚠️ Sitemap fetch failed: {sitemap_url} ({err})")
+        return [], notes
+
+    locs = extract_loc_urls_from_xml(xml)
     for u in locs:
-        u = (u or "").strip()
-        if u:
-            out.append(normalize_url(u))
-    return out
-
-
-def crawl_sitemaps_for_products(
-    starting_sitemap_url: str,
-    origin: str,
-    timeout: int,
-    max_product_urls: int = 3,
-    max_sitemaps_to_visit: int = 60,
-) -> Tuple[List[str], List[str]]:
-    notes: List[str] = []
-    visited: Set[str] = set()
-    queue: List[str] = [normalize_url(starting_sitemap_url)]
-    found_products: List[str] = []
-    found_set: Set[str] = set()
-
-    while queue and len(visited) < max_sitemaps_to_visit and len(found_products) < max_product_urls:
-        sm = normalize_url(queue.pop(0))
-        if sm in visited:
+        if len(found) >= limit:
+            break
+        if u in seen:
             continue
-        visited.add(sm)
+        seen.add(u)
+        if looks_like_product_url(u, origin):
+            found.append(u)
 
-        try:
-            _, xml_text = fetch_text(sm, timeout=timeout)
-        except Exception as e:
-            notes.append(f"⚠️ Sitemap fetch failed: {sm} ({e})")
-            continue
-
-        locs = extract_loc_urls_from_xml(xml_text)
-
-        for loc in locs:
-            if len(found_products) >= max_product_urls:
-                break
-
-            if looks_like_sitemap_url(loc, origin):
-                if loc not in visited and len(visited) + len(queue) < max_sitemaps_to_visit:
-                    queue.append(loc)
-                continue
-
-            if looks_like_product_url(loc, origin) and loc not in found_set:
-                found_set.add(loc)
-                found_products.append(loc)
-
-    if found_products:
-        notes.append(f"✅ Found {len(found_products)} product URL(s) via sitemap crawl")
+    if found:
+        notes.append(f"✅ Sitemap discovered {len(found)} product URL(s)")
     else:
-        notes.append("⚠️ No product URLs found in sitemap(s)")
+        notes.append("⚠️ Sitemap returned 0 product URLs")
+    return found, notes
 
-    return found_products, notes
 
-
-# ----------------------------
-# HYBRID CRAWLER ENGINE (Shopify Turbo -> Universal -> Robots -> Scrape)
-# ----------------------------
-def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str], List[str], bool]:
-    notes: List[str] = []
-    sitemap_found_products = False
-
-    home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
-    homepage_url = normalize_url(home_final)
-
-    # Step 1: Shopify Turbo
-    try:
-        turbo_url = urljoin(origin, SHOPIFY_SITEMAP_PRODUCTS_PATH)
-        _, xml_text = fetch_text(turbo_url, timeout=timeout)
-        locs = extract_loc_urls_from_xml(xml_text)
-
-        picked: List[str] = []
-        seen: Set[str] = set()
-        for u in locs:
-            if len(picked) >= 3:
-                break
-            if u in seen:
-                continue
-            seen.add(u)
-            if looks_like_product_url(u, origin):
-                picked.append(u)
-
-        if picked:
-            notes.append(f"✅ Shopify Turbo: found {len(picked)} product URL(s) via /sitemap_products_1.xml")
-            sitemap_found_products = True
-            return homepage_url, picked, notes, sitemap_found_products
-
-        notes.append("⚠️ Shopify Turbo: sitemap exists but produced 0 valid product URLs")
-    except Exception as e:
-        notes.append(f"⚠️ Shopify Turbo failed: {e}")
-
-    # Step 2: Universal sitemap.xml recursive
-    try:
-        sm_url = urljoin(origin, UNIVERSAL_SITEMAP_PATH)
-        products, sm_notes = crawl_sitemaps_for_products(sm_url, origin=origin, timeout=timeout, max_product_urls=3)
-        notes.extend(sm_notes)
-        if products:
-            sitemap_found_products = True
-            return homepage_url, products, notes, sitemap_found_products
-    except Exception as e:
-        notes.append(f"⚠️ Universal sitemap failed: {e}")
-
-    # Step 3: robots.txt sitemap fallbacks
-    try:
-        robots_text, _ = fetch_robots(origin, timeout=timeout)
-        if robots_text:
-            sm_urls = discover_sitemaps_from_robots(robots_text)
-            if sm_urls:
-                notes.append(f"ℹ️ robots.txt lists {len(sm_urls)} sitemap URL(s)")
-                for sm in sm_urls:
-                    products, sm_notes = crawl_sitemaps_for_products(sm, origin=origin, timeout=timeout, max_product_urls=3)
-                    notes.extend(sm_notes)
-                    if products:
-                        notes.append("✅ Product URLs discovered via robots.txt sitemap")
-                        sitemap_found_products = True
-                        return homepage_url, products, notes, sitemap_found_products
-            else:
-                notes.append("⚠️ robots.txt did not list sitemap URLs")
-        else:
-            notes.append("⚠️ robots.txt not available for sitemap discovery")
-    except Exception as e:
-        notes.append(f"⚠️ robots.txt fallback failed: {e}")
-
-    # Step 4: scrape homepage fallback
+def discover_from_homepage_scrape(origin: str, home_html: str, limit: int = 3) -> List[str]:
     soup = BeautifulSoup(home_html, "lxml")
     candidates: List[str] = []
     for a in soup.find_all("a", href=True):
@@ -467,27 +257,99 @@ def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str
         if looks_like_product_url(abs_u, origin):
             candidates.append(abs_u)
 
-    picked: List[str] = []
+    out: List[str] = []
     seen: Set[str] = set()
     for u in candidates:
         if u in seen:
             continue
         seen.add(u)
-        picked.append(u)
-        if len(picked) >= 3:
+        out.append(u)
+        if len(out) >= limit:
             break
+    return out
 
-    if picked:
-        notes.append(f"✅ Homepage scrape: found {len(picked)} product URL(s)")
+
+def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str], List[str]]:
+    notes: List[str] = []
+
+    home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
+    homepage_url = normalize_url(home_final)
+
+    # Step 1: Shopify Turbo
+    turbo_url = urljoin(origin, SHOPIFY_SITEMAP_PRODUCTS_PATH)
+    turbo_found, turbo_notes = crawl_sitemap_for_products(turbo_url, origin, timeout, limit=3)
+    notes.extend([f"Shopify Turbo: {n}" for n in turbo_notes])
+    if turbo_found:
+        return homepage_url, turbo_found, notes
+
+    # Step 2: Universal sitemap.xml
+    sm_url = urljoin(origin, UNIVERSAL_SITEMAP_PATH)
+    sm_found, sm_notes = crawl_sitemap_for_products(sm_url, origin, timeout, limit=3)
+    notes.extend([f"Universal Sitemap: {n}" for n in sm_notes])
+    if sm_found:
+        return homepage_url, sm_found, notes
+
+    # Step 3: Robots -> sitemap lines (lightweight)
+    robots_final, robots_text, robots_err = safe_fetch_text(urljoin(origin, "/robots.txt"), timeout)
+    if robots_text:
+        sitemap_lines = []
+        for line in robots_text.splitlines():
+            if line.strip().lower().startswith("sitemap:"):
+                sm = line.split(":", 1)[1].strip()
+                if sm:
+                    sitemap_lines.append(sm)
+        if sitemap_lines:
+            notes.append(f"Robots: Found {len(sitemap_lines)} sitemap declaration(s)")
+            for sm in sitemap_lines:
+                found, smn = crawl_sitemap_for_products(sm, origin, timeout, limit=3)
+                notes.extend([f"Robots Sitemap: {n}" for n in smn])
+                if found:
+                    return homepage_url, found, notes
+        else:
+            notes.append("Robots: No sitemap declarations found")
     else:
-        notes.append("❌ Homepage scrape: no product-like links found")
+        notes.append(f"Robots: not accessible ({robots_err})")
 
-    return homepage_url, picked, notes, sitemap_found_products
+    # Step 4: Scrape homepage links
+    scrape_found = discover_from_homepage_scrape(origin, home_html, limit=3)
+    if scrape_found:
+        notes.append(f"Homepage Scrape: Found {len(scrape_found)} product-like URL(s)")
+    else:
+        notes.append("Homepage Scrape: No product-like URLs found")
+    return homepage_url, scrape_found, notes
 
 
 # ----------------------------
-# JSON-LD PARSING
+# JSON-LD helpers
 # ----------------------------
+def try_parse_json(raw: str) -> Optional[Any]:
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+    # remove comments + trailing commas fallback
+    no_comments = re.sub(r"//.*?$|/\*.*?\*/", "", raw, flags=re.MULTILINE | re.DOTALL).strip()
+    no_trailing_commas = re.sub(r",\s*([}\]])", r"\1", no_comments)
+    try:
+        return json.loads(no_trailing_commas)
+    except Exception:
+        return None
+
+
+def extract_jsonld_payloads(html: str) -> List[Any]:
+    soup = BeautifulSoup(html, "lxml")
+    scripts = soup.find_all("script", attrs={"type": re.compile(r"application/ld\+json", re.I)})
+    payloads: List[Any] = []
+    for s in scripts:
+        raw = (s.get_text(strip=False) or "").strip()
+        if not raw:
+            continue
+        parsed = try_parse_json(raw)
+        if parsed is not None:
+            payloads.append(parsed)
+    return payloads
+
+
 def iter_json_objects(node: Any):
     if isinstance(node, dict):
         yield node
@@ -508,101 +370,24 @@ def normalize_schema_type(t: Any) -> List[str]:
         for item in t:
             out.extend(normalize_schema_type(item))
     elif isinstance(t, dict):
-        for k in ("@type", "type", "name"):
-            if k in t:
-                out.extend(normalize_schema_type(t.get(k)))
+        if "@type" in t:
+            out.extend(normalize_schema_type(t.get("@type")))
     return [x for x in out if x]
-
-
-def try_parse_json(raw: str) -> Optional[Any]:
-    try:
-        return json.loads(raw)
-    except Exception:
-        pass
-    no_comments = re.sub(r"//.*?$|/\*.*?\*/", "", raw, flags=re.MULTILINE | re.DOTALL).strip()
-    no_trailing_commas = re.sub(r",\s*([}\]])", r"\1", no_comments)
-    try:
-        return json.loads(no_trailing_commas)
-    except Exception:
-        return None
-
-
-def split_possible_json_blocks(raw: str) -> List[str]:
-    blocks: List[str] = []
-    i, n = 0, len(raw)
-    while i < n:
-        start = None
-        for j in range(i, n):
-            if raw[j] in "{[":
-                start = j
-                break
-        if start is None:
-            break
-
-        open_ch = raw[start]
-        close_ch = "}" if open_ch == "{" else "]"
-        depth = 0
-        in_str = False
-        esc = False
-
-        for k in range(start, n):
-            ch = raw[k]
-            if in_str:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_str = False
-            else:
-                if ch == '"':
-                    in_str = True
-                elif ch == open_ch:
-                    depth += 1
-                elif ch == close_ch:
-                    depth -= 1
-                    if depth == 0:
-                        blocks.append(raw[start : k + 1].strip())
-                        i = k + 1
-                        break
-        else:
-            break
-
-    return blocks or [raw]
-
-
-def extract_jsonld_payloads(html: str) -> Tuple[List[Any], int]:
-    soup = BeautifulSoup(html, "lxml")
-    scripts = soup.find_all("script", attrs={"type": re.compile(r"application/ld\+json", re.I)})
-    payloads: List[Any] = []
-    for s in scripts:
-        raw = (s.get_text(strip=False) or "").strip()
-        if not raw:
-            continue
-        parsed = try_parse_json(raw)
-        if parsed is not None:
-            payloads.append(parsed)
-            continue
-        for block in split_possible_json_blocks(raw):
-            p = try_parse_json(block)
-            if p is not None:
-                payloads.append(p)
-    return payloads, len(scripts)
 
 
 def flatten_jsonld_objects(payloads: List[Any]) -> List[Dict[str, Any]]:
     objs: List[Dict[str, Any]] = []
-    for payload in payloads:
-        roots = payload if isinstance(payload, list) else [payload]
-        for root in roots:
-            for obj in iter_json_objects(root):
-                if isinstance(obj, dict):
-                    if "@graph" in obj and isinstance(obj["@graph"], list):
-                        for g in obj["@graph"]:
-                            for o in iter_json_objects(g):
-                                if isinstance(o, dict):
-                                    objs.append(o)
-                    objs.append(obj)
+    roots = payloads if isinstance(payloads, list) else [payloads]
+    for payload in roots:
+        for obj in iter_json_objects(payload):
+            if isinstance(obj, dict):
+                # explode @graph if present
+                if "@graph" in obj and isinstance(obj["@graph"], list):
+                    for g in obj["@graph"]:
+                        for o in iter_json_objects(g):
+                            if isinstance(o, dict):
+                                objs.append(o)
+                objs.append(obj)
     return objs
 
 
@@ -622,7 +407,7 @@ def find_all(objs: List[Dict[str, Any]], target: str) -> List[Dict[str, Any]]:
 
 
 # ----------------------------
-# SCORING RULES
+# Scoring rules
 # ----------------------------
 def identity_ok(org_obj: Dict[str, Any]) -> bool:
     dis = org_obj.get("disambiguatingDescription")
@@ -636,26 +421,23 @@ def identity_ok(org_obj: Dict[str, Any]) -> bool:
     return False
 
 
-def offer_dict_has_price(d: Dict[str, Any]) -> bool:
-    if "price" in d and str(d.get("price", "")).strip() != "":
-        return True
-    ps = d.get("priceSpecification")
-    if isinstance(ps, dict) and "price" in ps and str(ps.get("price", "")).strip() != "":
-        return True
-    if isinstance(ps, list):
-        for item in ps:
-            if isinstance(item, dict) and "price" in item and str(item.get("price", "")).strip() != "":
-                return True
-    return False
-
-
 def offers_has_price(offers: Any) -> bool:
+    def offer_dict_has_price(d: Dict[str, Any]) -> bool:
+        if "price" in d and str(d.get("price", "")).strip():
+            return True
+        ps = d.get("priceSpecification")
+        if isinstance(ps, dict) and "price" in ps and str(ps.get("price", "")).strip():
+            return True
+        if isinstance(ps, list):
+            for item in ps:
+                if isinstance(item, dict) and "price" in item and str(item.get("price", "")).strip():
+                    return True
+        return False
+
     if isinstance(offers, dict):
         return offer_dict_has_price(offers)
     if isinstance(offers, list):
-        for item in offers:
-            if isinstance(item, dict) and offer_dict_has_price(item):
-                return True
+        return any(isinstance(o, dict) and offer_dict_has_price(o) for o in offers)
     return False
 
 
@@ -666,7 +448,10 @@ def commerce_ok(product_obj: Dict[str, Any]) -> bool:
     return offers_has_price(offers)
 
 
-def compute_score(org_found: bool, id_verified: bool, faq_found: bool, prod_found: bool, comm_ready: bool) -> int:
+def compute_score(org_found: bool, id_verified: bool, faq_found: bool, prod_found: bool, comm_ready: bool, ghost: bool) -> int:
+    # Ghost code forces 0 (render-blocking)
+    if ghost:
+        return 0
     score = 0
     if org_found:
         score += 10
@@ -681,65 +466,24 @@ def compute_score(org_found: bool, id_verified: bool, faq_found: bool, prod_foun
     return score
 
 
-def authority_tier1_present(org_obj: Dict[str, Any]) -> bool:
-    same_as = org_obj.get("sameAs")
-    links: List[str] = []
-    if isinstance(same_as, str) and same_as.strip():
-        links = [same_as.strip()]
-    elif isinstance(same_as, list):
-        links = [x.strip() for x in same_as if isinstance(x, str) and x.strip()]
-    if not links:
-        return False
-    for l in links:
-        if not re.match(r"^https?://", l, flags=re.I):
-            continue
-        h = host_of_url(l)
-        if any(dom in h for dom in AUTH_TIER1_DOMAINS):
-            return True
-    return False
-
-
 # ----------------------------
-# SEMANTIC CHECKS
+# Deep tech checks
 # ----------------------------
-def infer_brand_name_from_domain(origin: str) -> str:
-    host = domain_host(origin)
-    label = host.split(":")[0].split(".")[0]
-    label = re.sub(r"[^a-z0-9\-]+", "", label)
-    parts = [p for p in label.split("-") if p]
-    if not parts:
-        return "Your Brand"
-    return " ".join(p.capitalize() for p in parts)
+def check_robots(origin: str, timeout: int) -> Tuple[bool, Optional[str], Optional[str]]:
+    final, txt, err = safe_fetch_text(urljoin(origin, "/robots.txt"), timeout)
+    if err or txt is None:
+        return False, None, err
+    return True, txt, None
 
 
-def extract_title_h1_from_html(html: str) -> Tuple[str, str]:
-    soup = BeautifulSoup(html, "lxml")
-    title_tag = soup.find("title")
-    title_text = (title_tag.get_text(strip=True) if title_tag else "") or ""
-    h1_tag = soup.find("h1")
-    h1_text = (h1_tag.get_text(" ", strip=True) if h1_tag else "") or ""
-    return title_text, h1_text
-
-
-def extract_heading_counts(html: str) -> Tuple[int, int, int]:
-    soup = BeautifulSoup(html, "lxml")
-    h1 = 1 if soup.find("h1") else 0
-    h2 = len(soup.find_all("h2"))
-    h3 = len(soup.find_all("h3"))
-    return h1, h2, h3
-
-
-def recency_ok(title_text: str, h1_text: str) -> bool:
-    hay = f"{title_text} {h1_text}"
-    return ("2025" in hay) or ("2026" in hay)
-
-
-def brand_in_h1(brand: str, h1_text: str) -> bool:
-    if not brand or not h1_text:
-        return False
-    tokens = [t.lower() for t in re.split(r"\s+", brand.strip()) if t.strip()]
-    h = h1_text.lower()
-    return all(t in h for t in tokens)
+def check_llms_txt(origin: str, timeout: int) -> Tuple[bool, Optional[str]]:
+    final, txt, err = safe_fetch_text(urljoin(origin, "/llms.txt"), timeout)
+    if err or txt is None:
+        return False, err
+    # treat as present only if it isn't empty and not an HTML page
+    if len(txt.strip()) > 10 and "<html" not in txt.lower():
+        return True, None
+    return False, "llms.txt exists but appears empty or non-text."
 
 
 def semantic_density(text_len: int, html_len: int) -> float:
@@ -748,148 +492,247 @@ def semantic_density(text_len: int, html_len: int) -> float:
     return (float(text_len) / float(html_len)) * 100.0
 
 
-def scan_images_for_alt(soup: BeautifulSoup) -> Tuple[int, int, List[str]]:
+def extract_h1_text(soup: BeautifulSoup) -> str:
+    h1 = soup.find("h1")
+    return (h1.get_text(" ", strip=True) if h1 else "").strip()
+
+
+def schema_types_set(objs: List[Dict[str, Any]]) -> Set[str]:
+    out: Set[str] = set()
+    for o in objs:
+        t = o.get("@type")
+        types = normalize_schema_type(t)
+        for x in types:
+            out.add(x)
+    # present as canonical-cased-ish
+    return out
+
+
+def extract_social_sameas(org_obj: Dict[str, Any]) -> List[str]:
+    same_as = org_obj.get("sameAs")
+    links: List[str] = []
+    if isinstance(same_as, str) and same_as.strip():
+        links = [same_as.strip()]
+    elif isinstance(same_as, list):
+        links = [x.strip() for x in same_as if isinstance(x, str) and x.strip()]
+    socials: List[str] = []
+    for l in links:
+        h = urlparse(l).netloc.lower().replace("www.", "")
+        if any(dom in h for dom in SOCIAL_DOMAINS):
+            socials.append(l)
+    # unique, keep order
+    seen = set()
+    out = []
+    for s in socials:
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    return out
+
+
+def scan_images_missing_alt(soup: BeautifulSoup) -> Tuple[int, int, List[str]]:
     imgs = soup.find_all("img")
     total = len(imgs)
     missing = 0
-    examples: List[str] = []
+    missing_names: List[str] = []
     for img in imgs:
         alt = img.get("alt")
         if alt is None or str(alt).strip() == "":
             missing += 1
             src = (img.get("src") or "").strip()
-            fname = extract_filename_from_src(src) if src else "(no-src)"
-            examples.append(fname)
-    # top 3 examples
-    examples_out = []
+            missing_names.append(extract_filename_from_src(src))
+    # top 3 unique
+    top: List[str] = []
     seen = set()
-    for f in examples:
-        if f in seen:
+    for n in missing_names:
+        if n in seen:
             continue
-        seen.add(f)
-        examples_out.append(f)
-        if len(examples_out) >= 3:
+        seen.add(n)
+        top.append(n)
+        if len(top) >= 3:
             break
-    return total, missing, examples_out
+    return total, missing, top
 
 
 # ----------------------------
-# PAGE AUDIT (Ghost code: <600 visible chars => 0) + Deep Tech Metrics
+# Page audit
 # ----------------------------
 def audit_page(url: str, brand: str, timeout: int) -> PageAudit:
-    try:
-        final_url, html = fetch_text(url, timeout=timeout)
-    except Exception as e:
+    final, html, err = safe_fetch_text(url, timeout)
+    if err or html is None or final is None:
         return PageAudit(
             requested_url=url,
             final_url=url,
             ok_fetch=False,
-            fetch_error=str(e),
+            fetch_error=err or "Fetch failed.",
+            score=0,
             org_found=False,
             identity_verified=False,
             faq_found=False,
             product_found=False,
             commerce_ready=False,
-            score=0,
-            warnings=[f"⚠️ Crawl Failed: Cannot access this page reliably. ({e})"],
-            raw_kb=0.0,
-            text_len=0,
             ghost=False,
-            h1_present=False,
+            text_len=0,
+            html_len=0,
+            semantic_density=0.0,
+            h1_text="",
             h1_has_brand=False,
-            semantic_density_pct=0.0,
-            h2_count=0,
-            h3_count=0,
-            img_count=0,
-            img_missing_alt_count=0,
-            img_missing_alt_examples=[],
+            schema_types_found=set(),
         )
 
-    raw_bytes = len(html.encode("utf-8", errors="ignore"))
-    raw_kb = raw_bytes / 1024.0
-    html_len = len(html)
-
     soup = BeautifulSoup(html, "lxml")
-    visible_text = soup.get_text(" ", strip=True)
-    text_len = len(visible_text)
+    text = soup.get_text(" ", strip=True)
+    text_len = len(text)
+    html_len = len(html)
+    ghost = text_len < GHOST_TEXT_MIN
 
-    # H1 / heading counts
-    _, page_h1 = extract_title_h1_from_html(html)
-    h1_present = bool(page_h1.strip())
-    h1_has_brand = brand_in_h1(brand, page_h1)
-    _, h2_count, h3_count = extract_heading_counts(html)
-
-    # Images / alt
-    img_count, img_missing_alt_count, img_missing_alt_examples = scan_images_for_alt(soup)
-
-    # Semantic density
-    sem_density = semantic_density(text_len, html_len)
-
-    ghost = text_len < 600
-
-    payloads, script_count = extract_jsonld_payloads(html)
+    payloads = extract_jsonld_payloads(html)
     objs = flatten_jsonld_objects(payloads)
 
-    org = find_first(objs, "Organization")
-    products = find_all(objs, "Product")
-    faqs = find_all(objs, "FAQPage")
+    org_obj = find_first(objs, "Organization")
+    product_objs = find_all(objs, "Product")
+    faq_objs = find_all(objs, "FAQPage")
 
-    org_found = org is not None
-    prod_found = len(products) > 0
-    faq_found = len(faqs) > 0
+    org_found = org_obj is not None
+    identity_verified = identity_ok(org_obj) if org_obj else False
+    product_found = len(product_objs) > 0
+    commerce_ready = any(commerce_ok(p) for p in product_objs) if product_found else False
+    faq_found = len(faq_objs) > 0
 
-    id_verified = identity_ok(org) if org else False
-    comm_ready = any(commerce_ok(p) for p in products) if prod_found else False
-
-    base_score = compute_score(org_found, id_verified, faq_found, prod_found, comm_ready)
-
-    warnings: List[str] = []
-    if script_count > 0 and len(payloads) == 0:
-        warnings.append("⚠️ Schema Parsing Error: JSON-LD tags exist but appear malformed. AI may ignore them.")
-
-    # Deep tech flags
-    if sem_density < 10.0:
-        warnings.append("⚠️ Poor Semantic Ratio: Bloated Code (high code-to-text noise). Too much noise can confuse AI context windows.")
-
-    if img_count > 0 and img_missing_alt_count > 0:
-        warnings.append("⚠️ Visual Context Gap: Some images are missing alt text. AI loses visual semantics.")
-
-    if ghost:
-        warnings.append("⚠️ Render Blocking: Client-Side JavaScript detected.")
-        warnings.append("Impact: Severe. AI Agents see a blank page.")
-        score = 0
-    else:
-        score = base_score
+    score = compute_score(org_found, identity_verified, faq_found, product_found, commerce_ready, ghost)
+    h1_text = extract_h1_text(soup)
+    h1_has = brand_in_h1(brand, h1_text)
+    types_found = schema_types_set(objs)
 
     return PageAudit(
         requested_url=url,
-        final_url=final_url,
+        final_url=final,
         ok_fetch=True,
         fetch_error=None,
-        org_found=org_found,
-        identity_verified=id_verified,
-        faq_found=faq_found,
-        product_found=prod_found,
-        commerce_ready=comm_ready,
         score=score,
-        warnings=warnings,
-        raw_kb=raw_kb,
-        text_len=text_len,
+        org_found=org_found,
+        identity_verified=identity_verified,
+        faq_found=faq_found,
+        product_found=product_found,
+        commerce_ready=commerce_ready,
         ghost=ghost,
-        h1_present=h1_present,
-        h1_has_brand=h1_has_brand,
-        semantic_density_pct=sem_density,
-        h2_count=h2_count,
-        h3_count=h3_count,
-        img_count=img_count,
-        img_missing_alt_count=img_missing_alt_count,
-        img_missing_alt_examples=img_missing_alt_examples,
+        text_len=text_len,
+        html_len=html_len,
+        semantic_density=semantic_density(text_len, html_len),
+        h1_text=h1_text,
+        h1_has_brand=h1_has,
+        schema_types_found=types_found,
     )
 
 
 # ----------------------------
-# PATCH SNIPPETS (Phase 1)
+# Site audit runner
 # ----------------------------
+def run_site_audit(url: str, timeout: int) -> SiteAudit:
+    origin = origin_from_url(url)
+    brand = infer_brand_name(origin)
+
+    notes: List[str] = []
+
+    # Crawl: discover homepage + products
+    home_url, product_urls, crawl_notes = discover_home_and_products(origin, timeout)
+    notes.extend(crawl_notes)
+
+    scan_urls = [home_url] + [u for u in product_urls if u and not is_disallowed_asset(u)]
+    scan_urls = [normalize_url(u) for u in scan_urls]
+    # unique, keep order, limit to 4 pages
+    uniq: List[str] = []
+    seen: Set[str] = set()
+    for u in scan_urls:
+        if u in seen:
+            continue
+        seen.add(u)
+        uniq.append(u)
+        if len(uniq) >= 4:
+            break
+    scan_urls = uniq
+
+    # AI access checks
+    robots_ok, robots_text, robots_err = check_robots(origin, timeout)
+    llms_ok, llms_err = check_llms_txt(origin, timeout)
+
+    # Page audits
+    pages: List[PageAudit] = []
+    for u in scan_urls:
+        pages.append(audit_page(u, brand, timeout))
+
+    # Visual semantics aggregate
+    img_total = 0
+    img_missing_alt = 0
+    missing_examples: List[str] = []
+    # Trust & Entity aggregate
+    org_present_any = False
+    social_sameas_links: List[str] = []
+
+    # For image scan + sameAs socials, we need soups; reuse fetch lightly
+    for p in pages:
+        if not p.ok_fetch:
+            continue
+        final, html, err = safe_fetch_text(p.final_url, timeout)
+        if err or html is None:
+            continue
+        soup = BeautifulSoup(html, "lxml")
+
+        t, m, top = scan_images_missing_alt(soup)
+        img_total += t
+        img_missing_alt += m
+        for x in top:
+            if x not in missing_examples:
+                missing_examples.append(x)
+        missing_examples = missing_examples[:3]
+
+        payloads = extract_jsonld_payloads(html)
+        objs = flatten_jsonld_objects(payloads)
+        org_obj = find_first(objs, "Organization")
+        if org_obj:
+            org_present_any = True
+            for s in extract_social_sameas(org_obj):
+                if s not in social_sameas_links:
+                    social_sameas_links.append(s)
+
+    return SiteAudit(
+        origin=origin,
+        brand=brand,
+        homepage_url=home_url,
+        scan_urls=scan_urls,
+        notes=notes,
+        pages=pages,
+        robots_accessible=robots_ok,
+        robots_error=robots_err,
+        llms_txt_present=llms_ok,
+        llms_txt_error=llms_err,
+        img_total=img_total,
+        img_missing_alt=img_missing_alt,
+        img_missing_alt_examples=missing_examples,
+        org_present_any=org_present_any,
+        sameas_social_links=social_sameas_links,
+    )
+
+
+# ----------------------------
+# Score + Risk logic
+# ----------------------------
+def site_score(site: SiteAudit) -> int:
+    if not site.pages:
+        return 0
+    return int(round(sum(p.score for p in site.pages) / len(site.pages)))
+
+
+def revenue_risk_from_gap(your_score: int, comp_score: int) -> str:
+    gap = comp_score - your_score
+    if gap >= 15:
+        return "High"
+    if gap >= 5:
+        return "Medium"
+    return "Low"
+
+
 def organization_jsonld_template(domain: str, brand: str) -> str:
     return json.dumps(
         {
@@ -909,549 +752,229 @@ def organization_jsonld_template(domain: str, brand: str) -> str:
 
 
 # ----------------------------
-# RISK LABELING
-# ----------------------------
-def revenue_risk_from_score(score: int) -> Tuple[str, str]:
-    # label, severity for UI
-    if score < 50:
-        return "High", "error"
-    if score < 75:
-        return "Medium", "warning"
-    return "Low", "success"
-
-
-def impact_badge(impact: str) -> str:
-    impact = impact.upper().strip()
-    if impact == "HIGH":
-        return "[Impact: HIGH]"
-    if impact == "MED":
-        return "[Impact: MED]"
-    return "[Impact: LOW]"
-
-
-def effort_badge(effort: str) -> str:
-    effort = effort.upper().strip()
-    if effort == "LOW":
-        return "[Effort: LOW]"
-    if effort == "MED":
-        return "[Effort: MED]"
-    return "[Effort: HIGH]"
-
-
-# ----------------------------
-# SITE AUDIT RUNNER (Deep Tech)
-# ----------------------------
-def run_site_audit(input_url: str, timeout: int) -> SiteAuditResult:
-    origin = origin_from_url(input_url)
-    brand = infer_brand_name_from_domain(origin)
-
-    # robots / AI blocker
-    robots_text, robots_err = fetch_robots(origin, timeout=timeout)
-    robots_access = robots_text is not None
-    per_bot_blocked: Dict[str, bool] = {a: False for a in AI_BOTS_EXTENDED}
-    any_ai_blocked = False
-    sitemaps_from_robots: List[str] = []
-    if robots_text:
-        per_bot_blocked = parse_robots_for_blocks(robots_text, AI_BOTS_EXTENDED)
-        any_ai_blocked = any(per_bot_blocked.values())
-        sitemaps_from_robots = discover_sitemaps_from_robots(robots_text)
-
-    # llms.txt
-    llms_ok, llms_err = fetch_llms_txt(origin, timeout=timeout)
-
-    # fetch homepage for semantic checks + (crawler needs it)
-    home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
-    homepage_url = normalize_url(home_final)
-
-    # discover products (hybrid)
-    discovered_home, product_urls, crawl_notes, sitemap_found_products = discover_home_and_products(origin, timeout=timeout)
-    homepage_url = normalize_url(discovered_home) if discovered_home else homepage_url
-
-    scan_urls: List[str] = [homepage_url]
-    for u in product_urls:
-        nu = normalize_url(u)
-        if nu not in scan_urls and (not is_disallowed_asset(nu)) and (not nu.lower().endswith(".xml")):
-            scan_urls.append(nu)
-    scan_urls = scan_urls[:4]
-
-    audits: List[PageAudit] = []
-    for u in scan_urls:
-        audits.append(audit_page(u, brand=brand, timeout=timeout))
-
-    # homepage title/h1 semantic
-    title_text, h1_text = extract_title_h1_from_html(home_html)
-    recency_pass = recency_ok(title_text, h1_text)
-    entity_pass_home = brand_in_h1(brand, h1_text)
-
-    # homepage heading structure counts
-    _, home_h2_count, home_h3_count = extract_heading_counts(home_html)
-
-    # authority check (Tier 1) across scanned pages
-    authority_pass_any = False
-    org_seen_any = False
-    for a in audits:
-        if not a.ok_fetch:
-            continue
-        try:
-            _, html = fetch_text(a.final_url, timeout=timeout)
-        except Exception:
-            continue
-        payloads, _ = extract_jsonld_payloads(html)
-        objs = flatten_jsonld_objects(payloads)
-        org = find_first(objs, "Organization")
-        if org:
-            org_seen_any = True
-            if authority_tier1_present(org):
-                authority_pass_any = True
-                break
-
-    # derived flags
-    ghost_driver = any(a.ghost for a in audits if a.ok_fetch)
-
-    org_present_any = any(a.org_found for a in audits if a.ok_fetch)
-    product_present_any = any(a.product_found for a in audits if a.ok_fetch)
-    faq_present_any = any(a.faq_found for a in audits if a.ok_fetch)
-    commerce_ready_any = any(a.commerce_ready for a in audits if a.ok_fetch)
-
-    trust_driver_fail = (not authority_pass_any) or (not org_seen_any)
-
-    # deep tech aggregates
-    densities = [a.semantic_density_pct for a in audits if a.ok_fetch]
-    avg_density = sum(densities) / len(densities) if densities else 0.0
-    total_imgs = sum(a.img_count for a in audits if a.ok_fetch)
-    total_missing_alt = sum(a.img_missing_alt_count for a in audits if a.ok_fetch)
-
-    # aggregate top 3 filenames across pages
-    all_missing_names: List[str] = []
-    for a in audits:
-        all_missing_names.extend(a.img_missing_alt_examples)
-    top_missing: List[str] = []
-    seen = set()
-    for n in all_missing_names:
-        if n in seen:
-            continue
-        seen.add(n)
-        top_missing.append(n)
-        if len(top_missing) >= 3:
-            break
-
-    # scoring
-    health_score = round(sum(a.score for a in audits) / len(audits)) if audits else 0
-    leakage_pct = max(0, min(100, 100 - health_score))
-
-    deep = SiteDeepTech(
-        llms_txt_accessible=llms_ok,
-        llms_txt_error=llms_err,
-        robots_access=robots_access,
-        robots_error=robots_err,
-        any_ai_blocked=any_ai_blocked,
-        per_bot_blocked=per_bot_blocked,
-        sitemap_found_products=sitemap_found_products,
-        sitemap_notes=crawl_notes,
-        title_text=title_text,
-        h1_text=h1_text,
-        recency_pass=recency_pass,
-        entity_pass_home=entity_pass_home,
-        authority_pass_any=authority_pass_any,
-        org_seen_any=org_seen_any,
-        ghost_driver=ghost_driver,
-        trust_driver_fail=trust_driver_fail,
-        avg_semantic_density_pct=avg_density,
-        total_imgs=total_imgs,
-        total_missing_alt=total_missing_alt,
-        top_missing_alt_filenames=top_missing,
-        home_h2_count=home_h2_count,
-        home_h3_count=home_h3_count,
-        pages_scanned=len(audits),
-    )
-
-    return SiteAuditResult(
-        origin=origin,
-        brand=brand,
-        homepage_url=homepage_url,
-        scan_urls=scan_urls,
-        audits=audits,
-        deep=deep,
-        org_present_any=org_present_any,
-        product_present_any=product_present_any,
-        faq_present_any=faq_present_any,
-        commerce_ready_any=commerce_ready_any,
-        health_score=health_score,
-        leakage_pct=leakage_pct,
-    )
-
-
-# ----------------------------
-# UI HELPERS
-# ----------------------------
-def executive_summary_text(result: SiteAuditResult) -> str:
-    d = result.deep
-    issues: List[str] = []
-    proofs: List[str] = []
-
-    if not d.llms_txt_accessible:
-        issues.append("missing an llms.txt file")
-        proofs.append("llms.txt: not found")
-    if d.total_missing_alt > 0:
-        issues.append(f"has {d.total_missing_alt} images unreadable to AI (missing alt)")
-        if d.top_missing_alt_filenames:
-            proofs.append("examples: " + ", ".join(d.top_missing_alt_filenames))
-    if d.ghost_driver:
-        issues.append("contains pages that render blank to fast AI crawlers (Ghost Code)")
-        proofs.append("render: <600 visible characters")
-    if d.avg_semantic_density_pct < 10.0:
-        issues.append("has a poor semantic ratio (<10%)")
-        proofs.append(f"semantic density: {d.avg_semantic_density_pct:.1f}%")
-    if d.trust_driver_fail:
-        issues.append("lacks Tier-1 authority nodes (Wikidata/Wikipedia/Crunchbase)")
-        proofs.append("authority: no Tier-1 sameAs link found")
-    if not d.recency_pass:
-        issues.append("lacks a freshness signal (2025/2026)")
-        proofs.append("recency: not detected in Title/H1")
-    if not d.entity_pass_home:
-        issues.append("has entity ambiguity (brand not in homepage H1)")
-        proofs.append("entity: H1 mismatch")
-
-    if not issues:
-        return "✅ Strong baseline detected: No critical deficiencies surfaced in core AI visibility layers."
-
-    headline = "Critical Deficiencies Detected: " + ", ".join(issues[:3])
-    if len(issues) > 3:
-        headline += f", +{len(issues) - 3} more."
-
-    proofline = ""
-    if proofs:
-        proofline = " Proof: " + " | ".join(proofs[:3])
-
-    return headline + proofline
-
-
-def render_badge(text: str) -> str:
-    # lightweight badge formatting using markdown
-    return f"`{text}`"
-
-
-# ----------------------------
-# APP UI
+# UI
 # ----------------------------
 st.title("Agentic Infrastructure Audit")
 st.caption(
-    "WordLift-style deep technical audit for AI agents. "
-    "Competitor benchmarking + insight cards + per-page proofs."
+    "A high-end AEO/AI visibility scanner with competitor benchmarking. "
+    "Crawls your homepage + product pages and runs deep technical checks."
 )
 
 with st.container(border=True):
-    col_a, col_b = st.columns(2)
-    with col_a:
-        your_url = st.text_input("Your Website URL", placeholder="https://yourbrand.com")
-    with col_b:
-        comp_url = st.text_input("Competitor Website URL (Optional)", placeholder="https://competitor.com")
-
-    c1, c2 = st.columns([0.7, 0.3])
+    c1, c2 = st.columns(2)
     with c1:
-        timeout = st.slider("Request timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
+        target_url = st.text_input("Target URL", placeholder="https://yourbrand.com")
     with c2:
-        st.write("")
-        run = st.button("Run Competitive Audit", type="primary", use_container_width=True)
+        competitor_url = st.text_input("Competitor URL (Optional)", placeholder="https://competitor.com")
+
+    timeout = st.slider("Timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
+
+    run = st.button("Run Competitive Audit", type="primary", use_container_width=True)
 
 if not run:
-    st.info("Enter your site (and optionally a competitor) to generate a deep AEO/AI visibility audit.")
+    st.info("Enter a target URL (and optionally a competitor) to run a PageSpeed-style AI visibility audit.")
     st.stop()
 
-your_origin = origin_from_url(your_url)
-if not your_origin:
-    st.error("Please enter a valid 'Your Website URL' (e.g., https://example.com).")
+target_origin = origin_from_url(target_url)
+if not target_origin:
+    st.error("Please enter a valid Target URL (e.g., https://example.com).")
     st.stop()
 
-comp_origin = origin_from_url(comp_url) if comp_url.strip() else ""
+comp_origin = origin_from_url(competitor_url) if competitor_url.strip() else ""
 
-with st.status("Running deep audit…", expanded=False) as status:
-    status.update(label="Auditing your website…", state="running")
-    your_result = run_site_audit(your_origin, timeout=timeout)
+with st.status("Running audit…", expanded=False) as status:
+    status.update(label="Auditing target…", state="running")
+    target_site = run_site_audit(target_origin, timeout)
     time.sleep(0.05)
 
-    comp_result: Optional[SiteAuditResult] = None
+    comp_site: Optional[SiteAudit] = None
     if comp_origin:
         status.update(label="Auditing competitor…", state="running")
-        try:
-            comp_result = run_site_audit(comp_origin, timeout=timeout)
-        except Exception as e:
-            comp_result = None
-            st.warning(f"Competitor audit failed: {e}")
+        comp_site = run_site_audit(comp_origin, timeout)
+        time.sleep(0.05)
 
     status.update(label="Complete.", state="complete")
 
+your_score = site_score(target_site)
+comp_score = site_score(comp_site) if comp_site else 0
+
 # ----------------------------
-# HEAD-TO-HEAD SCORECARD (Retain competitor feature)
+# Metric Cards (streamlit-extras)
 # ----------------------------
-st.header("Head-to-Head Scorecard")
+st.subheader("Competitive Scorecard")
 
-if comp_result:
-    left, right = st.columns(2)
-
-    with left:
-        st.subheader("Your Site")
-        st.metric("Agentic Health Score", f"{your_result.health_score}/100", f"Industry Avg: {INDUSTRY_AVERAGE_SCORE}/100")
-        risk_label, severity = revenue_risk_from_score(your_result.health_score)
-        if severity == "error":
-            st.error(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
-        elif severity == "warning":
-            st.warning(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
-        else:
-            st.success(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
-
-    with right:
-        st.subheader("Competitor")
-        st.metric("Agentic Health Score", f"{comp_result.health_score}/100", "Benchmark")
-        comp_risk, comp_sev = revenue_risk_from_score(comp_result.health_score)
-        if comp_sev == "error":
-            st.error(f"Revenue Risk: {comp_risk} — AI Traffic Leakage: {comp_result.leakage_pct}%")
-        elif comp_sev == "warning":
-            st.warning(f"Revenue Risk: {comp_risk} — AI Traffic Leakage: {comp_result.leakage_pct}%")
-        else:
-            st.success(f"Revenue Risk: {comp_risk} — AI Traffic Leakage: {comp_result.leakage_pct}%")
-
-    if comp_result.health_score > your_result.health_score:
-        comp_host = domain_host(comp_result.origin)
-        st.warning(f"⚠️ Alert: {comp_host} is outranking you on Authority Signals.")
-    elif comp_result.health_score < your_result.health_score:
-        st.success("✅ You are ahead on AI visibility signals.")
+m1, m2, m3 = st.columns(3)
+with m1:
+    st.metric("Your Agentic Score", f"{your_score}/100")
+with m2:
+    if comp_site:
+        delta = comp_score - your_score
+        arrow = "↑" if delta > 0 else ("↓" if delta < 0 else "→")
+        st.metric("Competitor Score", f"{comp_score}/100", f"{arrow} {delta}")
     else:
-        st.info("ℹ️ You are tied on AI visibility signals.")
-else:
-    st.metric("Agentic Health Score", f"{your_result.health_score}/100", f"Industry Avg: {INDUSTRY_AVERAGE_SCORE}/100")
-    risk_label, sev = revenue_risk_from_score(your_result.health_score)
-    if sev == "error":
-        st.error(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
-    elif sev == "warning":
-        st.warning(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
+        st.metric("Competitor Score", "—", "Enter competitor")
+with m3:
+    if comp_site:
+        rr = revenue_risk_from_gap(your_score, comp_score)
+        st.metric("Revenue Risk", rr)
     else:
-        st.success(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
+        st.metric("Revenue Risk", "—")
+style_metric_cards(border_left_color="#4285F4", border_color="#E6E8EB", box_shadow=True)
+
+if comp_site and comp_score > your_score:
+    comp_host = urlparse(comp_site.origin).netloc.replace("www.", "")
+    st.warning(f"⚠️ Alert: {comp_host} is outranking you on Authority Signals.")
 
 st.divider()
 
 # ----------------------------
-# EXECUTIVE SUMMARY
+# WordLift-style Insight Grid (2x2)
 # ----------------------------
-st.subheader("Executive Summary")
-st.write(executive_summary_text(your_result))
+st.subheader("Insight Grid (Deep Tech)")
 
-st.divider()
+g1, g2 = st.columns(2)
+g3, g4 = st.columns(2)
 
-# ----------------------------
-# INSIGHT CARD GRID (2x2)
-# ----------------------------
-st.subheader("Deep Technical Insights")
-
-c1, c2 = st.columns(2)
-c3, c4 = st.columns(2)
-
-d = your_result.deep
-
-# Card 1: AI Access & Control
-with c1:
-    with st.container():
-        st.markdown("### AI Access & Control")
-        # Robots
-        if not d.robots_access:
-            st.error(f"{impact_badge('HIGH')} Robots.txt unreachable — crawlers may downgrade trust. ({d.robots_error})")
+# Card A: AI Access
+with g1:
+    with st.container(border=True):
+        st.markdown("### AI Access")
+        if target_site.robots_accessible:
+            st.success("robots.txt reachable.")
         else:
-            st.success("Robots.txt reachable.")
+            st.error("robots.txt unreachable. Crawlers may downgrade reliability.")
+            if target_site.robots_error:
+                st.caption(f"Error: {target_site.robots_error}")
 
-        if d.any_ai_blocked:
-            blocked = [k for k, v in d.per_bot_blocked.items() if v]
-            st.error(f"{impact_badge('HIGH')} AI agents blocked in robots.txt: {', '.join(blocked)}")
-            st.caption("Impact: AI agents may not crawl your site at all.")
+        if target_site.llms_txt_present:
+            st.success("llms.txt detected (explicit AI permissioning).")
         else:
-            st.success("No explicit AI-agent blocks detected (GPTBot/CCBot/Google-Extended/Anthropic/Claude).")
+            st.error("[Impact: HIGH] llms.txt missing — critical for explicit AI permissioning.")
+            st.caption("Why it matters: It clarifies agent access/policy and reduces ambiguity in AI crawling decisions.")
 
-        # llms.txt
-        if not d.llms_txt_accessible:
-            st.error(f"{impact_badge('HIGH')} {effort_badge('LOW')} llms.txt missing — critical for explicit AI permissioning.")
-            st.caption("Why it matters: explicit AI policy reduces ambiguity and improves agent trust decisions.")
-        else:
-            st.success("llms.txt detected (explicit AI permissioning present).")
+        st.caption("Pages scanned: " + str(len(target_site.pages)))
+        st.caption("Discovery notes (summary):")
+        if target_site.notes:
+            st.write("• " + " • ".join(target_site.notes[:3]))
 
-        # Sitemap
-        if d.sitemap_found_products:
-            st.success("Sitemap discovery: product URLs found (crawl efficiency improved).")
-        else:
-            st.warning(f"{impact_badge('MED')} Sitemap discovery weak — product pages may be under-crawled.")
-
-# Card 2: Semantic Structure
-with c2:
-    with st.container():
-        st.markdown("### Semantic Structure")
-        if d.ghost_driver:
-            st.error(f"{impact_badge('HIGH')} Render Blocking (Ghost Code) detected.")
-            st.caption("Severe: AI agents that read raw HTML see a blank page.")
-        else:
-            st.success("Render accessibility: readable HTML present.")
-
-        # Heading hierarchy
-        if d.home_h2_count == 0 and d.home_h3_count == 0:
-            st.warning(f"{impact_badge('MED')} H1-H3 hierarchy is thin on homepage (weak topical structure).")
-        else:
-            st.success(f"Heading depth: H2={d.home_h2_count}, H3={d.home_h3_count} on homepage.")
-
-        # Semantic density
-        if d.avg_semantic_density_pct < 10.0:
-            st.error(f"{impact_badge('HIGH')} Poor Semantic Ratio: {d.avg_semantic_density_pct:.1f}%")
-            st.caption("Too much code noise can confuse AI context windows and dilute relevance.")
-        elif d.avg_semantic_density_pct < 18.0:
-            st.warning(f"{impact_badge('MED')} Semantic Ratio is moderate: {d.avg_semantic_density_pct:.1f}%")
-        else:
-            st.success(f"Semantic Ratio: {d.avg_semantic_density_pct:.1f}% (healthy signal-to-noise).")
-
-# Card 3: Visual Context
-with c3:
-    with st.container():
-        st.markdown("### Visual Context")
-        st.write(f"Images scanned: **{d.total_imgs}**")
-        if d.total_imgs == 0:
+# Card B: Visual Semantics
+with g2:
+    with st.container(border=True):
+        st.markdown("### Visual Semantics")
+        st.write(f"Images scanned: **{target_site.img_total}**")
+        if target_site.img_total == 0:
             st.info("No images detected on scanned pages.")
         else:
-            if d.total_missing_alt > 0:
-                st.warning(f"{impact_badge('MED')} {effort_badge('LOW')} Missing alt text on **{d.total_missing_alt}** images.")
-                if d.top_missing_alt_filenames:
-                    st.caption("Proof (top filenames): " + ", ".join(d.top_missing_alt_filenames))
-                st.caption("Why it matters: alt text anchors visual content to AI-readable meaning.")
+            if target_site.img_missing_alt > 0:
+                st.warning(f"Missing alt text: **{target_site.img_missing_alt}**")
+                if target_site.img_missing_alt_examples:
+                    st.caption("Proof (filenames): " + ", ".join(target_site.img_missing_alt_examples))
+                st.caption("Why it matters: Missing alt reduces AI-readable meaning of visual content.")
             else:
-                st.success("All scanned images include alt text (strong visual semantics).")
+                st.success("All scanned images include alt text.")
 
-# Card 4: Entity & Trust
-with c4:
-    with st.container():
-        st.markdown("### Entity & Trust")
-        # Schema coverage
-        if not your_result.org_present_any:
-            st.error(f"{impact_badge('HIGH')} Organization schema missing — brand entity is ambiguous.")
+# Card C: Semantic Density
+with g3:
+    with st.container(border=True):
+        st.markdown("### Semantic Density")
+        densities = [p.semantic_density for p in target_site.pages if p.ok_fetch]
+        avg_density = (sum(densities) / len(densities)) if densities else 0.0
+        st.write(f"Average semantic density: **{avg_density:.2f}%**")
+
+        if avg_density < 5.0:
+            st.error("Bloated Code (<5%): AI struggles to read noise. Reduce markup/scripts and expose more meaningful text.")
+        elif avg_density < 10.0:
+            st.warning("Low density (<10%): Content-to-code ratio is weak. Consider simplifying templates and improving text signals.")
         else:
-            st.success("Organization schema detected (brand entity present).")
+            st.success("Healthy semantic ratio (signal > noise).")
 
-        if not your_result.faq_present_any:
-            st.warning(f"{impact_badge('MED')} {effort_badge('LOW')} FAQPage schema missing — weaker answer engine visibility.")
+        st.caption("Definition: (Visible Text Length / HTML Length) × 100")
+
+# Card D: Trust & Entity
+with g4:
+    with st.container(border=True):
+        st.markdown("### Trust & Entity")
+        org_any = any(p.org_found for p in target_site.pages if p.ok_fetch)
+        id_any = any(p.identity_verified for p in target_site.pages if p.ok_fetch)
+        if org_any:
+            st.success("Organization schema detected.")
+            if id_any:
+                st.success("Identity verified (sameAs or disambiguatingDescription present).")
+            else:
+                st.warning("Organization present but identity verification is weak (missing sameAs/disambiguatingDescription).")
         else:
-            st.success("FAQPage schema detected (answer engine active).")
+            st.error("Organization schema missing (brand entity is ambiguous).")
 
-        if not your_result.product_present_any:
-            st.warning(f"{impact_badge('MED')} Product schema not detected on scanned pages.")
+        if target_site.sameas_social_links:
+            st.info("Social profiles detected in sameAs:")
+            for s in target_site.sameas_social_links[:3]:
+                st.write(f"• {s}")
         else:
-            st.success("Product schema detected (commerce entity present).")
+            st.warning("No social sameAs links detected (weak entity corroboration).")
 
-        if your_result.product_present_any and not your_result.commerce_ready_any:
-            st.error(f"{impact_badge('HIGH')} Commerce blocked — offers/price missing. AI cannot safely transact.")
-        elif your_result.commerce_ready_any:
-            st.success("Commerce-ready offers detected (price/stock signals present).")
-
-        # Authority + Recency + Entity Clarity (homepage)
-        if d.trust_driver_fail:
-            st.warning(f"{impact_badge('HIGH')} Trust Vacuum — no Tier-1 authority nodes (Wikidata/Wikipedia/Crunchbase).")
-            st.caption("Tip: Knowledge Graph links reduce hallucination and improve entity confidence.")
-        else:
-            st.success("Tier-1 authority node detected (Knowledge Graph connected).")
-
-        if not d.recency_pass:
-            st.warning(f"{impact_badge('MED')} Recency signal missing (no 2025/2026 in Title/H1).")
-        else:
-            st.success("Recency signal detected (2025/2026 present).")
-
-        if not d.entity_pass_home:
-            st.warning(f"{impact_badge('MED')} Entity clarity risk — brand name not clearly present in homepage H1.")
-        else:
-            st.success("Homepage H1 includes brand name (entity clarity strong).")
+        st.caption("Note: Social links help, but Tier-1 sources are stronger for Knowledge Graph trust.")
 
 st.divider()
 
 # ----------------------------
-# DETAILED PAGE FINDINGS (Restored Per-Page Expanders)
+# Detailed Findings (Waterfall)
 # ----------------------------
-st.subheader("Detailed Page Findings (Proof)")
-st.caption("Home + discovered product pages. Each page shows exactly what is missing.")
+st.subheader("Detailed Page Analysis")
 
-for page in your_result.audits:
-    title = f"{page.final_url} — {page.score}/100"
-    with st.expander(title, expanded=False):
-        if not page.ok_fetch:
-            st.error(page.fetch_error or "Fetch failed.")
-            continue
+with st.expander("Open Detailed Page Analysis", expanded=False):
+    for p in target_site.pages:
+        label = f"{p.final_url} — {p.score}/100"
+        with st.expander(label, expanded=False):
+            if not p.ok_fetch:
+                st.error(p.fetch_error or "Fetch failed.")
+                continue
 
-        # Quick metrics row
-        m1, m2, m3, m4 = st.columns(4)
-        with m1:
-            st.metric("Raw Size", f"{page.raw_kb:.1f} KB")
-        with m2:
-            st.metric("Visible Text", f"{page.text_len}")
-        with m3:
-            st.metric("Semantic Density", f"{page.semantic_density_pct:.1f}%")
-        with m4:
-            st.metric("Missing Alt", f"{page.img_missing_alt_count}/{page.img_count}")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Ghost Code", "YES" if p.ghost else "NO")
+            with c2:
+                st.metric("Visible Text", str(p.text_len))
+            with c3:
+                st.metric("Semantic Density", f"{p.semantic_density:.2f}%")
+            style_metric_cards(border_left_color="#34A853", border_color="#E6E8EB", box_shadow=False)
 
-        # Page-level diagnostics
-        if page.ghost:
-            st.error(f"{impact_badge('HIGH')} Render Blocking (Ghost Code): page is effectively blank to fast AI crawlers.")
-        if page.semantic_density_pct < 10.0:
-            st.warning(f"{impact_badge('HIGH')} Poor Semantic Ratio (bloated code): {page.semantic_density_pct:.1f}%")
-        if page.img_missing_alt_count > 0:
-            st.warning(f"{impact_badge('MED')} {effort_badge('LOW')} Missing alt on {page.img_missing_alt_count} image(s).")
-            if page.img_missing_alt_examples:
-                st.caption("Examples: " + ", ".join(page.img_missing_alt_examples))
+            st.markdown("**Checklist**")
+            st.write(f"- H1 present: {'✅' if p.h1_text else '❌'}")
+            st.write(f"- H1 contains brand: {'✅' if p.h1_has_brand else '❌'}")
+            st.write(f"- Organization schema: {'✅' if p.org_found else '❌'}")
+            st.write(f"- Identity verified: {'✅' if p.identity_verified else '❌'}")
+            st.write(f"- Product schema: {'✅' if p.product_found else '❌'}")
+            st.write(f"- Offers/price present: {'✅' if p.commerce_ready else '❌'}")
+            st.write(f"- FAQPage schema: {'✅' if p.faq_found else '❌'}")
 
-        st.markdown("**Schema Checklist**")
-        st.write(f"- Organization Schema: {'✅' if page.org_found else '❌'}")
-        st.write(f"- Identity Verified (sameAs/disambiguatingDescription): {'✅' if page.identity_verified else '❌'}")
-        st.write(f"- Product Schema: {'✅' if page.product_found else '❌'}")
-        st.write(f"- Commerce Ready (offers/price): {'✅' if page.commerce_ready else '❌'}")
-        st.write(f"- FAQPage Schema: {'✅' if page.faq_found else '❌'}")
+            if p.ghost:
+                st.error("Render Blocking / Ghost Code: Page is 200 OK but exposes <600 readable characters. Fast AI crawlers may see blank HTML.")
 
-        st.markdown("**On-Page Semantic Checklist**")
-        st.write(f"- H1 Present: {'✅' if page.h1_present else '❌'}")
-        st.write(f"- H1 Contains Brand Name: {'✅' if page.h1_has_brand else '❌'}")
-        st.write(f"- Heading Depth: H2={page.h2_count}, H3={page.h3_count}")
-
-        if page.warnings:
-            st.markdown("**Alerts**")
-            for w in page.warnings:
-                st.info(w)
-
-with st.expander("Crawl Notes", expanded=False):
-    for n in your_result.deep.sitemap_notes:
-        st.write(n)
-    if your_result.deep.robots_access:
-        st.write("Robots.txt: accessible.")
-        if your_result.deep.any_ai_blocked:
-            blocked = [k for k, v in your_result.deep.per_bot_blocked.items() if v]
-            st.write("Blocked agents: " + ", ".join(blocked))
-        else:
-            st.write("No explicit AI-agent blocks detected in robots.txt.")
-    else:
-        st.write(f"Robots.txt: not accessible ({your_result.deep.robots_error}).")
-    st.write("Pages scanned:")
-    for u in your_result.scan_urls:
-        st.write(f"- {u}")
+            if p.schema_types_found:
+                # show a short list of schema types
+                types_preview = sorted(list(p.schema_types_found))[:12]
+                st.caption("Schema types found (sample): " + ", ".join(types_preview))
 
 st.divider()
 
 # ----------------------------
-# PHASE 1 / PHASE 2 UPSELL
+# Phase 2 Upsell
 # ----------------------------
 st.subheader("Phase 1 vs Phase 2")
 
-col_left, col_right = st.columns([0.55, 0.45])
+left, right = st.columns([0.55, 0.45])
 
-with col_left:
-    st.markdown("### Phase 1 (Defense): Basic Patch")
-    st.caption("Minimum 'Hello' tag to anchor brand identity and reduce AI confusion.")
-    st.code(organization_jsonld_template(your_result.origin, your_result.brand), language="json")
-    if not your_result.deep.llms_txt_accessible:
-        st.caption("Quick win: add /llms.txt to explicitly declare AI access policies.")
+with left:
+    st.markdown("### Phase 1 (Defense): Identity Patch")
+    st.caption("If your identity signal is weak, this is the minimum 'Hello' tag to anchor your brand entity.")
+    st.code(organization_jsonld_template(target_site.origin, target_site.brand), language="json")
 
-with col_right:
-    st.markdown("### 🚀 Phase 2 (Offense): The AEO Engine")
-    if comp_result:
-        comp_host = domain_host(comp_result.origin)
+with right:
+    st.markdown("### Phase 2 (Offense): Competitor Displacement")
+    if comp_site:
+        comp_host = urlparse(comp_site.origin).netloc.replace("www.", "")
         st.info(f"To beat {comp_host}, you need Programmatic Verification and Sentiment Injection.")
     else:
         st.info("To win, you need Programmatic Verification and Sentiment Injection.")
-    st.caption("This includes Knowledge Graph bootstrapping, structured content maps, and competitive entity displacement.")
+    st.caption("This requires a custom AEO engineering strategy (entity reinforcement, content mapping, and trust node acquisition).")
     st.link_button("👉 Book Your Strategy Call", "https://calendly.com", use_container_width=True)
