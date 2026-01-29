@@ -1,4 +1,4 @@
-# app.py — Agentic Infrastructure Audit (Strict Vercel-Style Dark Theme)
+# app.py — Agentic Infrastructure Audit (Clean, Native Professional UI)
 # Dependencies: streamlit, requests, beautifulsoup4, urllib.parse, re, json, time, datetime
 #
 # Install:
@@ -20,78 +20,9 @@ from bs4 import BeautifulSoup
 
 
 # ----------------------------
-# PAGE CONFIG
+# PAGE CONFIG (native, high-contrast)
 # ----------------------------
 st.set_page_config(page_title="Agentic Infrastructure Audit", page_icon="🧠", layout="centered")
-
-
-# ----------------------------
-# STRICT CSS (Inject EXACT CSS requested)
-# ----------------------------
-st.markdown(
-    """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-/* Global */
-html, body, [class*="css"] {
-  background-color: #0E1117 !important;
-  color: #E0E0E0 !important;
-  font-family: Inter, sans-serif !important;
-}
-
-.stApp {
-  background-color: #0E1117 !important;
-  color: #E0E0E0 !important;
-}
-
-/* Container */
-.block-container {
-  max-width: 800px !important;
-  margin: 0 auto !important;
-  padding-top: 28px !important;
-  padding-bottom: 48px !important;
-}
-
-/* Input Fields (CRITICAL FIX) */
-.stTextInput > div > div > input {
-  color: #FFFFFF !important;
-  background-color: #161B22 !important;
-  border: 1px solid #30363D !important;
-  border-radius: 8px !important;
-  padding: 12px !important;
-}
-
-/* Buttons */
-.stButton > button {
-  width: 100% !important;
-  background: linear-gradient(90deg, #238636, #2EA043) !important;
-  color: white !important;
-  border: none !important;
-  padding: 12px !important;
-  font-weight: 600 !important;
-  border-radius: 6px !important;
-}
-.stButton > button:hover {
-  box-shadow: 0 4px 12px rgba(46, 160, 67, 0.4) !important;
-}
-
-/* Metrics & Cards */
-div[data-testid="metric-container"] {
-  background-color: #161B22 !important;
-  border: 1px solid #30363D !important;
-  border-radius: 8px !important;
-  padding: 16px !important;
-}
-
-/* Hide Streamlit Chrome */
-#MainMenu {visibility: hidden;}
-header {visibility: hidden;}
-footer {visibility: hidden;}
-</style>
-""",
-    unsafe_allow_html=True,
-)
 
 
 # ----------------------------
@@ -148,6 +79,43 @@ class PageAudit:
     raw_kb: float
     text_len: int
     ghost: bool
+
+    # page-level semantic checks (best-effort)
+    h1_present: bool
+    h1_has_brand: bool
+
+
+@dataclass
+class SiteAuditResult:
+    origin: str
+    brand: str
+    homepage_url: str
+    scan_urls: List[str]
+    notes: List[str]
+    audits: List[PageAudit]
+
+    robots_access: bool
+    robots_error: Optional[str]
+    any_ai_blocked: bool
+    per_bot_blocked: Dict[str, bool]
+
+    title_text: str
+    h1_text: str
+    recency_pass: bool
+    entity_pass_home: bool
+
+    org_present_any: bool
+    product_present_any: bool
+    faq_present_any: bool
+    commerce_ready_any: bool
+    authority_pass_any: bool
+    org_seen_any: bool
+
+    ghost_driver: bool
+    trust_driver_fail: bool
+
+    health_score: int
+    leakage_pct: int
 
 
 # ----------------------------
@@ -359,11 +327,10 @@ def crawl_sitemaps_for_products(
 
 
 # ----------------------------
-# HYBRID CRAWLER ENGINE (KEEP STANDARD)
+# HYBRID CRAWLER ENGINE (Shopify Turbo -> Universal -> Robots -> Scrape)
 # ----------------------------
-def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str], List[str], bool]:
+def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str], List[str]]:
     notes: List[str] = []
-    sitemap_reachable = False
 
     home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
     homepage_url = normalize_url(home_final)
@@ -372,7 +339,6 @@ def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str
     try:
         turbo_url = urljoin(origin, SHOPIFY_SITEMAP_PRODUCTS_PATH)
         _, xml_text = fetch_text(turbo_url, timeout=timeout)
-        sitemap_reachable = True
         locs = extract_loc_urls_from_xml(xml_text)
 
         picked: List[str] = []
@@ -388,7 +354,7 @@ def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str
 
         if picked:
             notes.append(f"✅ Shopify Turbo: found {len(picked)} product URL(s) via /sitemap_products_1.xml")
-            return homepage_url, picked, notes, sitemap_reachable
+            return homepage_url, picked, notes
 
         notes.append("⚠️ Shopify Turbo: sitemap exists but produced 0 valid product URLs")
     except Exception as e:
@@ -400,8 +366,7 @@ def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str
         products, sm_notes = crawl_sitemaps_for_products(sm_url, origin=origin, timeout=timeout, max_product_urls=3)
         notes.extend(sm_notes)
         if products:
-            sitemap_reachable = True
-            return homepage_url, products, notes, sitemap_reachable
+            return homepage_url, products, notes
     except Exception as e:
         notes.append(f"⚠️ Universal sitemap failed: {e}")
 
@@ -417,8 +382,7 @@ def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str
                     notes.extend(sm_notes)
                     if products:
                         notes.append("✅ Product URLs discovered via robots.txt sitemap")
-                        sitemap_reachable = True
-                        return homepage_url, products, notes, sitemap_reachable
+                        return homepage_url, products, notes
             else:
                 notes.append("⚠️ robots.txt did not list sitemap URLs")
         else:
@@ -452,11 +416,11 @@ def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str
     else:
         notes.append("❌ Homepage scrape: no product-like links found")
 
-    return homepage_url, picked, notes, sitemap_reachable
+    return homepage_url, picked, notes
 
 
 # ----------------------------
-# JSON-LD PARSING (KEEP STANDARD)
+# JSON-LD PARSING
 # ----------------------------
 def iter_json_objects(node: Any):
     if isinstance(node, dict):
@@ -592,7 +556,7 @@ def find_all(objs: List[Dict[str, Any]], target: str) -> List[Dict[str, Any]]:
 
 
 # ----------------------------
-# SCORING RULES (KEEP STANDARD)
+# SCORING RULES
 # ----------------------------
 def identity_ok(org_obj: Dict[str, Any]) -> bool:
     dis = org_obj.get("disambiguatingDescription")
@@ -664,15 +628,50 @@ def authority_tier1_present(org_obj: Dict[str, Any]) -> bool:
         if not re.match(r"^https?://", l, flags=re.I):
             continue
         h = host_of_url(l)
-        if any(dom in h for dom in ("wikipedia.org", "wikidata.org", "crunchbase.com")):
+        if any(dom in h for dom in AUTH_TIER1_DOMAINS):
             return True
     return False
 
 
 # ----------------------------
-# PAGE AUDIT (KEEP STANDARD + Ghost Detector)
+# HOMEPAGE SEMANTIC CHECKS
 # ----------------------------
-def audit_page(url: str, timeout: int) -> PageAudit:
+def infer_brand_name_from_domain(origin: str) -> str:
+    host = domain_host(origin)
+    label = host.split(":")[0].split(".")[0]
+    label = re.sub(r"[^a-z0-9\-]+", "", label)
+    parts = [p for p in label.split("-") if p]
+    if not parts:
+        return "Your Brand"
+    return " ".join(p.capitalize() for p in parts)
+
+
+def extract_title_h1_from_html(html: str) -> Tuple[str, str]:
+    soup = BeautifulSoup(html, "lxml")
+    title_tag = soup.find("title")
+    title_text = (title_tag.get_text(strip=True) if title_tag else "") or ""
+    h1_tag = soup.find("h1")
+    h1_text = (h1_tag.get_text(" ", strip=True) if h1_tag else "") or ""
+    return title_text, h1_text
+
+
+def recency_ok(title_text: str, h1_text: str) -> bool:
+    hay = f"{title_text} {h1_text}"
+    return ("2025" in hay) or ("2026" in hay)
+
+
+def brand_in_h1(brand: str, h1_text: str) -> bool:
+    if not brand or not h1_text:
+        return False
+    tokens = [t.lower() for t in re.split(r"\s+", brand.strip()) if t.strip()]
+    h = h1_text.lower()
+    return all(t in h for t in tokens)
+
+
+# ----------------------------
+# PAGE AUDIT (Ghost code detector: <600 visible chars => 0)
+# ----------------------------
+def audit_page(url: str, brand: str, timeout: int) -> PageAudit:
     try:
         final_url, html = fetch_text(url, timeout=timeout)
     except Exception as e:
@@ -691,6 +690,8 @@ def audit_page(url: str, timeout: int) -> PageAudit:
             raw_kb=0.0,
             text_len=0,
             ghost=False,
+            h1_present=False,
+            h1_has_brand=False,
         )
 
     raw_bytes = len(html.encode("utf-8", errors="ignore"))
@@ -699,6 +700,11 @@ def audit_page(url: str, timeout: int) -> PageAudit:
     soup = BeautifulSoup(html, "lxml")
     visible_text = soup.get_text(" ", strip=True)
     text_len = len(visible_text)
+
+    # Page-level H1 (for per-page findings)
+    _, page_h1 = extract_title_h1_from_html(html)
+    h1_present = bool(page_h1.strip())
+    h1_has_brand = brand_in_h1(brand, page_h1)
 
     ghost = text_len < 600
 
@@ -744,42 +750,9 @@ def audit_page(url: str, timeout: int) -> PageAudit:
         raw_kb=raw_kb,
         text_len=text_len,
         ghost=ghost,
+        h1_present=h1_present,
+        h1_has_brand=h1_has_brand,
     )
-
-
-# ----------------------------
-# HOMEPAGE SEMANTIC CHECKS (KEEP STANDARD)
-# ----------------------------
-def infer_brand_name_from_domain(origin: str) -> str:
-    host = domain_host(origin)
-    label = host.split(":")[0].split(".")[0]
-    label = re.sub(r"[^a-z0-9\-]+", "", label)
-    parts = [p for p in label.split("-") if p]
-    if not parts:
-        return "Your Brand"
-    return " ".join(p.capitalize() for p in parts)
-
-
-def extract_homepage_title_h1(home_html: str) -> Tuple[str, str]:
-    soup = BeautifulSoup(home_html, "lxml")
-    title_tag = soup.find("title")
-    title_text = (title_tag.get_text(strip=True) if title_tag else "") or ""
-    h1_tag = soup.find("h1")
-    h1_text = (h1_tag.get_text(" ", strip=True) if h1_tag else "") or ""
-    return title_text, h1_text
-
-
-def recency_ok(title_text: str, h1_text: str) -> bool:
-    hay = f"{title_text} {h1_text}"
-    return ("2025" in hay) or ("2026" in hay)
-
-
-def brand_in_h1(brand: str, h1_text: str) -> bool:
-    if not brand or not h1_text:
-        return False
-    tokens = [t.lower() for t in re.split(r"\s+", brand.strip()) if t.strip()]
-    h = h1_text.lower()
-    return all(t in h for t in tokens)
 
 
 # ----------------------------
@@ -803,81 +776,26 @@ def organization_jsonld_template(domain: str, brand: str) -> str:
     )
 
 
-def faqpage_jsonld_template(domain: str, brand: str) -> str:
-    return json.dumps(
-        {
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            "mainEntity": [
-                {
-                    "@type": "Question",
-                    "name": f"What is {brand}?",
-                    "acceptedAnswer": {
-                        "@type": "Answer",
-                        "text": f"{brand} is available at {domain}. Replace this with your real FAQ answer.",
-                    },
-                }
-            ],
-        },
-        indent=2,
-        ensure_ascii=False,
-    )
+# ----------------------------
+# RISK LABELING
+# ----------------------------
+def revenue_risk_from_score(score: int) -> Tuple[str, str]:
+    # label, color intent (used for metric delta/alerts)
+    if score < 50:
+        return "High", "error"
+    if score < 75:
+        return "Medium", "warning"
+    return "Low", "success"
 
 
 # ----------------------------
-# UI HELPERS
+# SITE AUDIT RUNNER
 # ----------------------------
-def passfail(ok: bool) -> str:
-    return "✅ PASS" if ok else "❌ FAIL"
-
-
-def traffic_leakage_bar(leakage_pct: int) -> str:
-    leakage_pct = max(0, min(100, int(leakage_pct)))
-    return f"""
-<div style="background-color:#161B22;border:1px solid #30363D;border-radius:8px;padding:16px;">
-  <div style="color:#9DA7B3;font-size:12px;font-weight:600;margin-bottom:10px;">📉 Estimated AI Traffic Leakage</div>
-  <div style="font-size:28px;font-weight:800;color:#E0E0E0;line-height:1;">{leakage_pct}%</div>
-  <div style="margin-top:12px;height:14px;border-radius:999px;background:rgba(224,224,224,0.08);overflow:hidden;">
-    <div style="height:100%;width:{leakage_pct}%;border-radius:999px;background:linear-gradient(90deg,#ff4d4d,#ff8c1a);"></div>
-  </div>
-  <div style="color:#9DA7B3;font-size:12px;margin-top:10px;">
-    Percentage of intent-based queries where your brand is ignored due to technical gaps.
-  </div>
-</div>
-"""
-
-
-# ----------------------------
-# LAYOUT UPDATE (Centered Title + Tight Form)
-# ----------------------------
-st.markdown(
-    """
-<div style="text-align:center; margin-bottom: 10px;">
-  <div style="font-size:28px; font-weight:800; color:#E0E0E0;">Agentic Infrastructure Audit</div>
-  <div style="margin-top:6px; color:#9DA7B3; font-size:14px;">
-    The GTmetrix for AI SEO — diagnose rendering, schema, freshness, entity clarity, and trust authority.
-  </div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
-with st.form("scan_form", clear_on_submit=False):
-    site_url = st.text_input("Website URL", value="", placeholder="https://example.com")
-    timeout = st.slider("Request timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
-    run = st.form_submit_button("Run Scan")
-
-st.markdown("---")
-
-if run:
-    origin = origin_from_url(site_url)
-    if not origin:
-        st.error("Please enter a valid URL (e.g., https://example.com).")
-        st.stop()
-
+def run_site_audit(input_url: str, timeout: int) -> SiteAuditResult:
+    origin = origin_from_url(input_url)
     brand = infer_brand_name_from_domain(origin)
 
-    # robots
+    # robots / AI blocker
     robots_text, robots_err = fetch_robots(origin, timeout=timeout)
     robots_access = robots_text is not None
     per_bot_blocked: Dict[str, bool] = {a: False for a in AI_BOTS}
@@ -886,56 +804,32 @@ if run:
         per_bot_blocked = parse_robots_for_blocks(robots_text, AI_BOTS)
         any_ai_blocked = any(per_bot_blocked.values())
 
-    notes: List[str] = []
+    # fetch homepage HTML once for semantic checks + fallback crawling internals
+    home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
+    homepage_url = normalize_url(home_final)
+
+    # discover products
+    discovered_home, product_urls, notes = discover_home_and_products(origin, timeout=timeout)
+    homepage_url = normalize_url(discovered_home) if discovered_home else homepage_url
+
+    scan_urls: List[str] = [homepage_url]
+    for u in product_urls:
+        nu = normalize_url(u)
+        if nu not in scan_urls and (not is_disallowed_asset(nu)) and (not nu.lower().endswith(".xml")):
+            scan_urls.append(nu)
+    scan_urls = scan_urls[:4]
+
     audits: List[PageAudit] = []
-    scan_urls: List[str] = []
+    for u in scan_urls:
+        audits.append(audit_page(u, brand=brand, timeout=timeout))
 
-    homepage_url = ""
-    home_html = ""
-    found_products = False
-
-    with st.status("Running scan…", expanded=False) as status:
-        status.update(label="Fetching homepage…", state="running")
-        try:
-            home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
-            homepage_url = normalize_url(home_final)
-        except Exception as e:
-            status.update(label="Homepage fetch failed.", state="error")
-            st.error(f"Homepage fetch failed: {e}")
-            st.stop()
-
-        status.update(label="Discovering product pages (Hybrid crawler)…", state="running")
-        try:
-            discovered_home, product_urls, crawl_notes, _ = discover_home_and_products(origin, timeout=timeout)
-            notes.extend(crawl_notes)
-            homepage_url = normalize_url(discovered_home) if discovered_home else homepage_url
-        except Exception as e:
-            notes.append(f"⚠️ Discovery engine error: {e}")
-            product_urls = []
-
-        scan_urls = [homepage_url]
-        for u in product_urls:
-            nu = normalize_url(u)
-            if nu not in scan_urls and (not is_disallowed_asset(nu)) and (not nu.lower().endswith(".xml")):
-                scan_urls.append(nu)
-        scan_urls = scan_urls[:4]
-        found_products = len(scan_urls) > 1
-
-        status.update(label=f"Auditing {len(scan_urls)} page(s)…", state="running")
-        for i, u in enumerate(scan_urls, start=1):
-            status.update(label=f"Auditing {i}/{len(scan_urls)}…", state="running")
-            audits.append(audit_page(u, timeout=timeout))
-            time.sleep(0.05)
-
-        status.update(label="Complete.", state="complete")
-
-    # homepage semantic checks
-    title_text, h1_text = extract_homepage_title_h1(home_html)
+    # homepage title/h1 semantic
+    title_text, h1_text = extract_title_h1_from_html(home_html)
     recency_pass = recency_ok(title_text, h1_text)
-    entity_pass = brand_in_h1(brand, h1_text)
+    entity_pass_home = brand_in_h1(brand, h1_text)
 
-    # authority check
-    authority_pass = False
+    # authority check (Tier 1) across scanned pages
+    authority_pass_any = False
     org_seen_any = False
     for a in audits:
         if not a.ok_fetch:
@@ -950,136 +844,252 @@ if run:
         if org:
             org_seen_any = True
             if authority_tier1_present(org):
-                authority_pass = True
+                authority_pass_any = True
                 break
 
+    # derived flags
     ghost_driver = any(a.ghost for a in audits if a.ok_fetch)
-    trust_driver_fail = (not authority_pass) or (not org_seen_any)
+    org_present_any = any(a.org_found for a in audits if a.ok_fetch)
+    product_present_any = any(a.product_found for a in audits if a.ok_fetch)
+    faq_present_any = any(a.faq_found for a in audits if a.ok_fetch)
+    commerce_ready_any = any(a.commerce_ready for a in audits if a.ok_fetch)
 
-    org_present = any(a.org_found for a in audits if a.ok_fetch)
-    product_present = any(a.product_found for a in audits if a.ok_fetch)
-    faq_present = any(a.faq_found for a in audits if a.ok_fetch)
-    commerce_ready = any(a.commerce_ready for a in audits if a.ok_fetch)
+    trust_driver_fail = (not authority_pass_any) or (not org_seen_any)
 
+    # scoring
     health_score = round(sum(a.score for a in audits) / len(audits)) if audits else 0
-    leakage = max(0, min(100, 100 - health_score))
+    leakage_pct = max(0, min(100, 100 - health_score))
 
-    # Scorecard
-    c1, c2 = st.columns([0.5, 0.5])
+    return SiteAuditResult(
+        origin=origin,
+        brand=brand,
+        homepage_url=homepage_url,
+        scan_urls=scan_urls,
+        notes=notes,
+        audits=audits,
+        robots_access=robots_access,
+        robots_error=robots_err,
+        any_ai_blocked=any_ai_blocked,
+        per_bot_blocked=per_bot_blocked,
+        title_text=title_text,
+        h1_text=h1_text,
+        recency_pass=recency_pass,
+        entity_pass_home=entity_pass_home,
+        org_present_any=org_present_any,
+        product_present_any=product_present_any,
+        faq_present_any=faq_present_any,
+        commerce_ready_any=commerce_ready_any,
+        authority_pass_any=authority_pass_any,
+        org_seen_any=org_seen_any,
+        ghost_driver=ghost_driver,
+        trust_driver_fail=trust_driver_fail,
+        health_score=health_score,
+        leakage_pct=leakage_pct,
+    )
+
+
+# ----------------------------
+# UI
+# ----------------------------
+st.title("Agentic Infrastructure Audit")
+st.caption(
+    "A competitive AEO audit for AI agents (ChatGPT, Perplexity). "
+    "We scan your homepage + product pages to diagnose rendering, entity signals, freshness, and authority."
+)
+
+with st.container(border=True):
+    col_a, col_b = st.columns(2)
+    with col_a:
+        your_url = st.text_input("Your Website URL", placeholder="https://yourbrand.com")
+    with col_b:
+        comp_url = st.text_input("Competitor Website URL (Optional)", placeholder="https://competitor.com")
+
+    c1, c2 = st.columns([0.7, 0.3])
     with c1:
-        st.metric("Agentic Health Score", f"{health_score}/100", f"Industry Avg: {INDUSTRY_AVERAGE_SCORE}/100")
+        timeout = st.slider("Request timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
     with c2:
-        st.markdown(traffic_leakage_bar(leakage), unsafe_allow_html=True)
+        st.write("")  # spacing
+        run = st.button("Run Competitive Audit", type="primary", use_container_width=True)
 
-    st.markdown("")
+if not run:
+    st.info("Enter your website (and an optional competitor) to run a head-to-head AI visibility audit.")
+    st.stop()
 
-    # Alerts
-    if any_ai_blocked:
-        blocked_list = [k for k, v in per_bot_blocked.items() if v]
-        st.error(f"🚨 AI Access Blocked in robots.txt: {', '.join(blocked_list)}")
+your_origin = origin_from_url(your_url)
+if not your_origin:
+    st.error("Please enter a valid 'Your Website URL' (e.g., https://example.com).")
+    st.stop()
 
-    if ghost_driver:
-        st.warning("⚠️ Render Blocking: Client-Side JavaScript detected. Impact: Severe. AI Agents see a blank page.")
+comp_origin = origin_from_url(comp_url) if comp_url.strip() else ""
 
-    # Drivers (only fails)
-    drivers: List[Tuple[str, str]] = []
-    if ghost_driver:
-        drivers.append(("Rendering Latency", "Render Blocking: Your page returns 200 OK but exposes almost no readable HTML content to fast crawlers."))
-    if not recency_pass:
-        drivers.append(("Stale Signal Risk", "Outdated Metadata: Homepage Title/H1 does not explicitly signal '2025' or '2026'."))
-    if not entity_pass:
-        drivers.append(("Entity Disconnect", "H1/Entity Mismatch: Brand name is not clearly present in the homepage H1."))
-    if trust_driver_fail:
-        drivers.append(("Trust Vacuum", "Low Trust Authority: No Tier-1 sameAs links found (Wikidata/Wikipedia/Crunchbase)."))
+# Run audits with progress status
+with st.status("Running audit…", expanded=False) as status:
+    status.update(label="Auditing your website…", state="running")
+    your_result = run_site_audit(your_origin, timeout=timeout)
+    time.sleep(0.05)
 
-    if drivers:
-        st.markdown("### 🛑 Top Invisibility Drivers")
-        for title, desc in drivers:
-            st.warning(f"**{title}** — {desc}")
-        st.markdown("")
+    comp_result: Optional[SiteAuditResult] = None
+    if comp_origin:
+        status.update(label="Auditing competitor…", state="running")
+        try:
+            comp_result = run_site_audit(comp_origin, timeout=timeout)
+        except Exception as e:
+            comp_result = None
+            st.warning(f"Competitor audit failed: {e}")
 
-    # Waterfall
-    with st.expander("📋 View Full Technical Diagnostics (Waterfall)", expanded=False):
-        st.markdown("#### Infrastructure")
-        st.write(f"- **Robots.txt Access:** {passfail(robots_access)}" + ("" if robots_access else f" (error: {robots_err})"))
-        st.write(f"- **AI Blocked (GPTBot/CCBot/Google-Extended):** {passfail(not any_ai_blocked)}")
-        st.write(f"- **Sitemap Reachability (products discovered):** {passfail(found_products)}")
-        st.write(f"- **Render Accessibility (Ghost Code):** {passfail(not ghost_driver)}")
+    status.update(label="Complete.", state="complete")
 
-        st.markdown("---")
-        st.markdown("#### Schema Layer")
-        st.write(f"- **Organization (Identity tag present):** {passfail(org_present)}")
-        st.write(f"- **Product (Commerce tags present):** {passfail(product_present)}")
-        st.write(f"- **FAQ (Knowledge tags present):** {passfail(faq_present)}")
-        st.write(f"- **Commerce Readiness (offers/price):** {passfail(commerce_ready)}")
+# ----------------------------
+# SECTION 1: HEAD-TO-HEAD SCORECARD
+# ----------------------------
+st.header("1) Head-to-Head Scorecard")
 
-        st.markdown("---")
-        st.markdown("#### Semantic Layer")
-        st.write(f"- **Metadata Recency ('2025'/'2026' detected):** {passfail(recency_pass)}")
-        st.write(f"- **Entity Clarity (Brand in H1):** {passfail(entity_pass)}")
-        st.write(f"- **Authority Nodes (Tier-1 links present):** {passfail(authority_pass)}")
+if comp_result:
+    left, right = st.columns(2)
 
-        st.markdown("---")
-        st.markdown("#### Page-Level Detail")
-        for a in audits:
-            with st.expander(f"{a.final_url} — {a.score}/100", expanded=False):
-                if not a.ok_fetch:
-                    st.error(a.fetch_error or "Fetch failed.")
-                    continue
-                st.write(f"**Raw Page Size:** {a.raw_kb:.1f} KB")
-                st.write(f"**Visible Text (raw HTML):** {a.text_len} characters")
-                st.write(f"**Ghost Code:** {passfail(not a.ghost)}")
-                st.write("**Schema:**")
-                st.write(f"- Organization: {passfail(a.org_found)}")
-                st.write(f"- Identity Verified: {passfail(a.identity_verified)}")
-                st.write(f"- Product: {passfail(a.product_found)}")
-                st.write(f"- Commerce Ready: {passfail(a.commerce_ready)}")
-                st.write(f"- FAQ: {passfail(a.faq_found)}")
-                if a.warnings:
-                    st.markdown("**Alerts:**")
-                    for w in a.warnings:
-                        st.warning(w)
+    with left:
+        st.subheader("Your Site")
+        st.metric("Agentic Health Score", f"{your_result.health_score}/100", f"Industry Avg: {INDUSTRY_AVERAGE_SCORE}/100")
+        risk_label, _ = revenue_risk_from_score(your_result.health_score)
+        st.metric("Revenue Risk", risk_label, delta=f"AI Traffic Leakage: {your_result.leakage_pct}%")
 
-        with st.expander("Crawler Notes", expanded=False):
-            for n in notes:
-                st.write(n)
-            st.write("**Pages scanned:**")
-            for u in scan_urls:
-                st.write(f"- {u}")
-            st.write("**Homepage signals:**")
-            st.write(f"- Title: {title_text[:220] + ('…' if len(title_text) > 220 else '')}")
-            st.write(f"- H1: {h1_text[:220] + ('…' if len(h1_text) > 220 else '')}")
+    with right:
+        st.subheader("Competitor")
+        st.metric("Agentic Health Score", f"{comp_result.health_score}/100", "Benchmark")
+        comp_risk, _ = revenue_risk_from_score(comp_result.health_score)
+        st.metric("Revenue Risk", comp_risk, delta=f"AI Traffic Leakage: {comp_result.leakage_pct}%")
 
-    # Phase 1 / Phase 2
-    st.markdown("---")
-    p1, p2 = st.columns([0.55, 0.45])
-
-    with p1:
-        st.markdown("### Phase 1 (Defense): Basic Patch")
-        st.markdown(
-            "<div style='color:#9DA7B3; font-size:13px;'>Minimum 'Hello' tags to prevent identity + answer failures.</div>",
-            unsafe_allow_html=True,
-        )
-        st.code(organization_jsonld_template(origin, brand), language="json")
-        st.code(faqpage_jsonld_template(origin, brand), language="json")
-
-    with p2:
-        st.markdown("### 🚀 Phase 2: Vector Space Dominance")
-        st.info(
-            "To win, you need **Competitor Displacement**, **Sentiment Injection**, and **Programmatic Verification**. "
-            "This requires custom engineering."
-        )
-        st.link_button("👉 Book Your Phase 2 Strategy Call", "https://calendly.com", use_container_width=True)
+    # Winner declaration + authority alert
+    if comp_result.health_score > your_result.health_score:
+        comp_host = domain_host(comp_result.origin)
+        st.warning(f"⚠️ Alert: {comp_host} is outranking you on Authority Signals.")
+    elif comp_result.health_score < your_result.health_score:
+        st.success("✅ You are currently ahead on AI visibility signals.")
+    else:
+        st.info("ℹ️ You are roughly tied on AI visibility signals.")
 
 else:
-    st.markdown(
-        """
-<div style="background-color:#161B22;border:1px solid #30363D;border-radius:8px;padding:16px;">
-  <div style="font-weight:700; font-size:15px; color:#E0E0E0;">Enter a domain and run the scan</div>
-  <div style="color:#9DA7B3; margin-top:6px; font-size:13px;">
-    We auto-discover product pages (when possible) and diagnose why AI agents ignore your brand.
-  </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
+    st.metric("Agentic Health Score", f"{your_result.health_score}/100", f"Industry Avg: {INDUSTRY_AVERAGE_SCORE}/100")
+    risk_label, severity = revenue_risk_from_score(your_result.health_score)
+    if severity == "error":
+        st.error(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
+    elif severity == "warning":
+        st.warning(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
+    else:
+        st.success(f"Revenue Risk: {risk_label} — AI Traffic Leakage: {your_result.leakage_pct}%")
+
+st.divider()
+
+# ----------------------------
+# SECTION 2: DIAGNOSTICS (WHY)
+# ----------------------------
+st.header("2) Diagnostics (Why You're Invisible)")
+
+# Driver 1: Ghost Code
+if your_result.ghost_driver:
+    st.error("Render Blocking (Ghost Code): Page is 200 OK but exposes <600 readable characters. AI agents may see a blank page.")
+else:
+    st.success("Render Accessibility: Pages expose readable HTML content (no Ghost Code detected).")
+
+# Driver 2: Recency
+if not your_result.recency_pass:
+    st.warning("Outdated Metadata (Recency): Homepage Title/H1 does not include 2025/2026. AI tends to prioritize fresh signals.")
+else:
+    st.success("Recency Signal: Homepage includes current-year freshness cues (2025/2026).")
+
+# Driver 3: Entity clarity
+if not your_result.entity_pass_home:
+    st.warning("H1/Entity Mismatch: Brand name is not clearly present in the homepage H1. This increases entity confusion.")
+else:
+    st.success("Entity Clarity: Brand name appears in the homepage H1.")
+
+# Driver 4: Trust Vacuum / Authority
+if your_result.trust_driver_fail:
+    st.warning("Low Trust Authority: No Tier-1 sameAs links found (Wikidata / Wikipedia / Crunchbase).")
+else:
+    st.success("Authority Signals: Tier-1 sameAs link detected (Knowledge Graph connected).")
+
+# AI blocker callout (kept)
+if your_result.any_ai_blocked:
+    blocked = [k for k, v in your_result.per_bot_blocked.items() if v]
+    st.error(f"AI Access Blocked in robots.txt: {', '.join(blocked)} — some AI agents may not crawl your site at all.")
+elif your_result.robots_access:
+    st.info("robots.txt accessible. No explicit AI-agent blocks detected for GPTBot/CCBot/Google-Extended.")
+else:
+    st.info("robots.txt not accessible. Some crawlers may treat this as a reliability signal.")
+
+st.divider()
+
+# ----------------------------
+# SECTION 3: DETAILED PAGE FINDINGS (PER-PAGE EXPANDERS)
+# ----------------------------
+st.header("3) Detailed Page Findings")
+
+st.caption("Each expander shows exactly what each page is missing (Home + discovered Product pages).")
+
+for page in your_result.audits:
+    title = f"{page.final_url} — {page.score}/100"
+    with st.expander(title, expanded=False):
+        if not page.ok_fetch:
+            st.error(page.fetch_error or "Fetch failed.")
+            continue
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Raw Size", f"{page.raw_kb:.1f} KB")
+        with col2:
+            st.metric("Visible Text", f"{page.text_len} chars")
+        with col3:
+            st.metric("Render Accessible", "No" if page.ghost else "Yes")
+
+        if page.ghost:
+            st.error("Ghost Code Detected: This page likely relies on client-side JavaScript. Fast AI crawlers may see empty HTML.")
+
+        st.subheader("Schema Checklist")
+        st.write(f"- Organization Schema: {'✅' if page.org_found else '❌'}")
+        st.write(f"- Identity Verified (sameAs/disambiguatingDescription): {'✅' if page.identity_verified else '❌'}")
+        st.write(f"- Product Schema: {'✅' if page.product_found else '❌'}")
+        st.write(f"- Commerce Ready (offers/price): {'✅' if page.commerce_ready else '❌'}")
+        st.write(f"- FAQPage Schema: {'✅' if page.faq_found else '❌'}")
+
+        st.subheader("On-Page Semantic Checklist")
+        st.write(f"- H1 Present: {'✅' if page.h1_present else '❌'}")
+        st.write(f"- H1 Contains Brand Name: {'✅' if page.h1_has_brand else '❌'}")
+
+        if page.warnings:
+            st.subheader("Alerts")
+            for w in page.warnings:
+                st.warning(w)
+
+with st.expander("Crawler Notes", expanded=False):
+    for n in your_result.notes:
+        st.write(n)
+    st.write("Pages scanned:")
+    for u in your_result.scan_urls:
+        st.write(f"- {u}")
+    st.write("Homepage signals:")
+    st.write(f"- Title: {your_result.title_text[:240] + ('…' if len(your_result.title_text) > 240 else '')}")
+    st.write(f"- H1: {your_result.h1_text[:240] + ('…' if len(your_result.h1_text) > 240 else '')}")
+
+st.divider()
+
+# ----------------------------
+# SECTION 4: PHASE 2 UPSELL
+# ----------------------------
+st.header("4) Next Steps (Phase 1 vs Phase 2)")
+
+col_left, col_right = st.columns([0.55, 0.45])
+
+with col_left:
+    st.subheader("Phase 1 (Defense): Add the 'Hello' Tag")
+    st.caption("This prevents identity ambiguity and gives AI a canonical brand entity to attach to.")
+    st.code(organization_jsonld_template(your_result.origin, your_result.brand), language="json")
+
+with col_right:
+    st.subheader("Phase 2 (Offense): The AEO Engine")
+    if comp_result:
+        comp_host = domain_host(comp_result.origin)
+        st.info(f"To beat {comp_host}, you need Programmatic Verification and Sentiment Injection.")
+    else:
+        st.info("To win, you need Programmatic Verification and Sentiment Injection.")
+    st.link_button("👉 Book Your Strategy Call", "https://calendly.com", use_container_width=True)
