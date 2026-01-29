@@ -1,4 +1,4 @@
-# app.py — Premium Agentic Infrastructure Audit (Vercel-style Dark Mode)
+# app.py — Agentic Infrastructure Audit (Strict Vercel-Style Dark Theme)
 # Dependencies: streamlit, requests, beautifulsoup4, urllib.parse, re, json, time, datetime
 #
 # Install:
@@ -20,159 +20,74 @@ from bs4 import BeautifulSoup
 
 
 # ----------------------------
-# Premium UI (Vercel-style Dark Mode)
+# PAGE CONFIG
 # ----------------------------
 st.set_page_config(page_title="Agentic Infrastructure Audit", page_icon="🧠", layout="centered")
 
+
+# ----------------------------
+# STRICT CSS (Inject EXACT CSS requested)
+# ----------------------------
 st.markdown(
     """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* Global */
 html, body, [class*="css"] {
-  font-family: 'Inter', sans-serif !important;
+  background-color: #0E1117 !important;
+  color: #E0E0E0 !important;
+  font-family: Inter, sans-serif !important;
 }
 
 .stApp {
-  background: #0E1117;
-  color: #E6EDF3;
+  background-color: #0E1117 !important;
+  color: #E0E0E0 !important;
 }
 
-/* Center + max width container */
+/* Container */
 .block-container {
-  max-width: 900px;
-  padding-top: 2rem !important;
-  padding-bottom: 3rem !important;
+  max-width: 800px !important;
+  margin: 0 auto !important;
+  padding-top: 28px !important;
+  padding-bottom: 48px !important;
 }
 
-/* Inputs */
-div[data-testid="stTextInput"] input {
-  background: transparent !important;
+/* Input Fields (CRITICAL FIX) */
+.stTextInput > div > div > input {
+  color: #FFFFFF !important;
+  background-color: #161B22 !important;
   border: 1px solid #30363D !important;
-  border-radius: 10px !important;
-  color: #E6EDF3 !important;
-  padding: 0.7rem 0.9rem !important;
+  border-radius: 8px !important;
+  padding: 12px !important;
 }
 
-div[data-testid="stTextInput"] label {
-  color: #E6EDF3 !important;
-  opacity: 0.9;
-}
-
-/* Button */
-div.stButton > button {
+/* Buttons */
+.stButton > button {
   width: 100% !important;
-  background: linear-gradient(45deg, #2ecc71, #3498db) !important;
+  background: linear-gradient(90deg, #238636, #2EA043) !important;
   color: white !important;
   border: none !important;
-  border-radius: 8px !important;
-  font-weight: 700 !important;
-  transition: all 0.3s ease !important;
-  padding: 0.8rem 1rem !important;
-}
-
-div.stButton > button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-
-/* Metric cards */
-div[data-testid="stMetric"] {
-  background: #161b22 !important;
-  border: 1px solid #30363D !important;
-  border-radius: 12px !important;
-  padding: 14px 14px !important;
-}
-
-div[data-testid="stMetricLabel"] {
-  color: #9DA7B3 !important;
+  padding: 12px !important;
   font-weight: 600 !important;
-  letter-spacing: 0.02em !important;
+  border-radius: 6px !important;
+}
+.stButton > button:hover {
+  box-shadow: 0 4px 12px rgba(46, 160, 67, 0.4) !important;
 }
 
-div[data-testid="stMetricValue"] {
-  color: #E6EDF3 !important;
-  font-weight: 800 !important;
-}
-
-/* Expanders */
-details {
-  background: #161b22 !important;
+/* Metrics & Cards */
+div[data-testid="metric-container"] {
+  background-color: #161B22 !important;
   border: 1px solid #30363D !important;
-  border-radius: 12px !important;
-  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  padding: 16px !important;
 }
 
-details summary {
-  color: #E6EDF3 !important;
-  font-weight: 700 !important;
-}
-
-hr {
-  border-color: rgba(48,54,61,0.55) !important;
-}
-
-/* Custom thick gauge */
-.gauge-wrap {
-  background: #161b22;
-  border: 1px solid #30363D;
-  border-radius: 12px;
-  padding: 14px;
-}
-.gauge-title {
-  color: #9DA7B3;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.gauge-row {
-  display:flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-top: 8px;
-}
-.gauge-value {
-  font-size: 28px;
-  font-weight: 800;
-  color: #E6EDF3;
-}
-.gauge-sub {
-  font-size: 12px;
-  color: #9DA7B3;
-  margin-top: 6px;
-}
-.gauge-bar {
-  margin-top: 10px;
-  height: 14px;
-  border-radius: 999px;
-  background: rgba(230,237,243,0.08);
-  overflow: hidden;
-}
-.gauge-fill {
-  height: 100%;
-  width: 0%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #ff4d4d 0%, #ff9f1a 55%, #f1c40f 100%);
-}
-
-/* Link button */
-a[data-testid="stLinkButton"] {
-  width: 100% !important;
-  display: inline-flex !important;
-  justify-content: center !important;
-  border-radius: 10px !important;
-  border: 1px solid #30363D !important;
-  padding: 0.85rem 1rem !important;
-  font-weight: 800 !important;
-  color: #E6EDF3 !important;
-  background: transparent !important;
-  text-decoration: none !important;
-}
-a[data-testid="stLinkButton"]:hover {
-  border-color: rgba(52,152,219,0.9) !important;
-  box-shadow: 0 6px 20px rgba(52,152,219,0.15) !important;
-}
+/* Hide Streamlit Chrome */
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
 </style>
 """,
     unsafe_allow_html=True,
@@ -444,7 +359,7 @@ def crawl_sitemaps_for_products(
 
 
 # ----------------------------
-# HYBRID CRAWLER ENGINE
+# HYBRID CRAWLER ENGINE (KEEP STANDARD)
 # ----------------------------
 def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str], List[str], bool]:
     notes: List[str] = []
@@ -541,7 +456,7 @@ def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str
 
 
 # ----------------------------
-# JSON-LD PARSING
+# JSON-LD PARSING (KEEP STANDARD)
 # ----------------------------
 def iter_json_objects(node: Any):
     if isinstance(node, dict):
@@ -677,7 +592,7 @@ def find_all(objs: List[Dict[str, Any]], target: str) -> List[Dict[str, Any]]:
 
 
 # ----------------------------
-# SCORING RULES
+# SCORING RULES (KEEP STANDARD)
 # ----------------------------
 def identity_ok(org_obj: Dict[str, Any]) -> bool:
     dis = org_obj.get("disambiguatingDescription")
@@ -749,13 +664,13 @@ def authority_tier1_present(org_obj: Dict[str, Any]) -> bool:
         if not re.match(r"^https?://", l, flags=re.I):
             continue
         h = host_of_url(l)
-        if any(dom in h for dom in AUTH_TIER1_DOMAINS):
+        if any(dom in h for dom in ("wikipedia.org", "wikidata.org", "crunchbase.com")):
             return True
     return False
 
 
 # ----------------------------
-# PAGE AUDIT (with Ghost Code override)
+# PAGE AUDIT (KEEP STANDARD + Ghost Detector)
 # ----------------------------
 def audit_page(url: str, timeout: int) -> PageAudit:
     try:
@@ -785,7 +700,6 @@ def audit_page(url: str, timeout: int) -> PageAudit:
     visible_text = soup.get_text(" ", strip=True)
     text_len = len(visible_text)
 
-    # Ghost Code Detector (Critical) -> automatic 0
     ghost = text_len < 600
 
     payloads, script_count = extract_jsonld_payloads(html)
@@ -834,7 +748,7 @@ def audit_page(url: str, timeout: int) -> PageAudit:
 
 
 # ----------------------------
-# HOMEPAGE SEMANTIC CHECKS
+# HOMEPAGE SEMANTIC CHECKS (KEEP STANDARD)
 # ----------------------------
 def infer_brand_name_from_domain(origin: str) -> str:
     host = domain_host(origin)
@@ -917,53 +831,41 @@ def passfail(ok: bool) -> str:
     return "✅ PASS" if ok else "❌ FAIL"
 
 
-def leakage_gauge_html(leakage_pct: int) -> str:
+def traffic_leakage_bar(leakage_pct: int) -> str:
     leakage_pct = max(0, min(100, int(leakage_pct)))
     return f"""
-<div class="gauge-wrap">
-  <div class="gauge-title">📉 Estimated AI Traffic Leakage</div>
-  <div class="gauge-row">
-    <div class="gauge-value">{leakage_pct}%</div>
-    <div style="color:#9DA7B3; font-size:12px; font-weight:600;">Market Readiness</div>
+<div style="background-color:#161B22;border:1px solid #30363D;border-radius:8px;padding:16px;">
+  <div style="color:#9DA7B3;font-size:12px;font-weight:600;margin-bottom:10px;">📉 Estimated AI Traffic Leakage</div>
+  <div style="font-size:28px;font-weight:800;color:#E0E0E0;line-height:1;">{leakage_pct}%</div>
+  <div style="margin-top:12px;height:14px;border-radius:999px;background:rgba(224,224,224,0.08);overflow:hidden;">
+    <div style="height:100%;width:{leakage_pct}%;border-radius:999px;background:linear-gradient(90deg,#ff4d4d,#ff8c1a);"></div>
   </div>
-  <div class="gauge-bar">
-    <div class="gauge-fill" style="width:{leakage_pct}%"></div>
+  <div style="color:#9DA7B3;font-size:12px;margin-top:10px;">
+    Percentage of intent-based queries where your brand is ignored due to technical gaps.
   </div>
-  <div class="gauge-sub">Percentage of intent-based queries where your brand is ignored due to technical gaps.</div>
 </div>
 """
 
 
 # ----------------------------
-# HEADER LAYOUT (70/30)
+# LAYOUT UPDATE (Centered Title + Tight Form)
 # ----------------------------
-header_left, header_right = st.columns([0.7, 0.3], vertical_alignment="bottom")
+st.markdown(
+    """
+<div style="text-align:center; margin-bottom: 10px;">
+  <div style="font-size:28px; font-weight:800; color:#E0E0E0;">Agentic Infrastructure Audit</div>
+  <div style="margin-top:6px; color:#9DA7B3; font-size:14px;">
+    The GTmetrix for AI SEO — diagnose rendering, schema, freshness, entity clarity, and trust authority.
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
-with header_left:
-    st.markdown("## Agentic Infrastructure Audit")
-    st.markdown(
-        "<div style='color:#9DA7B3; font-size:14px; margin-top:-4px;'>"
-        "A premium AEO diagnostic: render accessibility, freshness signals, entity clarity, and trust authority."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-with header_right:
-    # Button already defined by Streamlit below; keep this column for a clean layout.
-    # We'll render inputs and button just under the header, but align the button to the right column.
-    pass
-
-st.markdown("")
-
-# Inputs row aligned like Vercel: input wide + button at right
-in_left, in_right = st.columns([0.7, 0.3], vertical_alignment="bottom")
-with in_left:
+with st.form("scan_form", clear_on_submit=False):
     site_url = st.text_input("Website URL", value="", placeholder="https://example.com")
-with in_right:
-    run = st.button("Run Scan", type="primary")
-
-with st.expander("Advanced Settings", expanded=False):
     timeout = st.slider("Request timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
+    run = st.form_submit_button("Run Scan")
 
 st.markdown("---")
 
@@ -975,7 +877,7 @@ if run:
 
     brand = infer_brand_name_from_domain(origin)
 
-    # Infrastructure: robots
+    # robots
     robots_text, robots_err = fetch_robots(origin, timeout=timeout)
     robots_access = robots_text is not None
     per_bot_blocked: Dict[str, bool] = {a: False for a in AI_BOTS}
@@ -990,7 +892,6 @@ if run:
 
     homepage_url = ""
     home_html = ""
-    sitemap_reachable = False
     found_products = False
 
     with st.status("Running scan…", expanded=False) as status:
@@ -1005,7 +906,7 @@ if run:
 
         status.update(label="Discovering product pages (Hybrid crawler)…", state="running")
         try:
-            discovered_home, product_urls, crawl_notes, sitemap_reachable = discover_home_and_products(origin, timeout=timeout)
+            discovered_home, product_urls, crawl_notes, _ = discover_home_and_products(origin, timeout=timeout)
             notes.extend(crawl_notes)
             homepage_url = normalize_url(discovered_home) if discovered_home else homepage_url
         except Exception as e:
@@ -1028,12 +929,12 @@ if run:
 
         status.update(label="Complete.", state="complete")
 
-    # Semantic checks on homepage
+    # homepage semantic checks
     title_text, h1_text = extract_homepage_title_h1(home_html)
     recency_pass = recency_ok(title_text, h1_text)
     entity_pass = brand_in_h1(brand, h1_text)
 
-    # Authority check across scanned pages (Tier 1 sources)
+    # authority check
     authority_pass = False
     org_seen_any = False
     for a in audits:
@@ -1052,40 +953,35 @@ if run:
                 authority_pass = True
                 break
 
-    # Drivers
     ghost_driver = any(a.ghost for a in audits if a.ok_fetch)
     trust_driver_fail = (not authority_pass) or (not org_seen_any)
 
-    # Schema layer presence
     org_present = any(a.org_found for a in audits if a.ok_fetch)
     product_present = any(a.product_found for a in audits if a.ok_fetch)
     faq_present = any(a.faq_found for a in audits if a.ok_fetch)
     commerce_ready = any(a.commerce_ready for a in audits if a.ok_fetch)
 
-    # Health score
     health_score = round(sum(a.score for a in audits) / len(audits)) if audits else 0
     leakage = max(0, min(100, 100 - health_score))
 
-    # ----------------------------
-    # LAYER 1: SCORECARD
-    # ----------------------------
-    sc1, sc2 = st.columns([0.5, 0.5])
-    with sc1:
+    # Scorecard
+    c1, c2 = st.columns([0.5, 0.5])
+    with c1:
         st.metric("Agentic Health Score", f"{health_score}/100", f"Industry Avg: {INDUSTRY_AVERAGE_SCORE}/100")
-    with sc2:
-        st.markdown(leakage_gauge_html(leakage), unsafe_allow_html=True)
+    with c2:
+        st.markdown(traffic_leakage_bar(leakage), unsafe_allow_html=True)
 
     st.markdown("")
 
+    # Alerts
     if any_ai_blocked:
         blocked_list = [k for k, v in per_bot_blocked.items() if v]
         st.error(f"🚨 AI Access Blocked in robots.txt: {', '.join(blocked_list)}")
+
     if ghost_driver:
         st.warning("⚠️ Render Blocking: Client-Side JavaScript detected. Impact: Severe. AI Agents see a blank page.")
 
-    # ----------------------------
-    # LAYER 2: TOP INVISIBILITY DRIVERS (ONLY FAILS)
-    # ----------------------------
+    # Drivers (only fails)
     drivers: List[Tuple[str, str]] = []
     if ghost_driver:
         drivers.append(("Rendering Latency", "Render Blocking: Your page returns 200 OK but exposes almost no readable HTML content to fast crawlers."))
@@ -1102,9 +998,7 @@ if run:
             st.warning(f"**{title}** — {desc}")
         st.markdown("")
 
-    # ----------------------------
-    # LAYER 3: TECHNICAL WATERFALL (EXPANDABLE)
-    # ----------------------------
+    # Waterfall
     with st.expander("📋 View Full Technical Diagnostics (Waterfall)", expanded=False):
         st.markdown("#### Infrastructure")
         st.write(f"- **Robots.txt Access:** {passfail(robots_access)}" + ("" if robots_access else f" (error: {robots_err})"))
@@ -1156,18 +1050,14 @@ if run:
             st.write(f"- Title: {title_text[:220] + ('…' if len(title_text) > 220 else '')}")
             st.write(f"- H1: {h1_text[:220] + ('…' if len(h1_text) > 220 else '')}")
 
-    # ----------------------------
-    # PHASE 1 / PHASE 2
-    # ----------------------------
+    # Phase 1 / Phase 2
     st.markdown("---")
     p1, p2 = st.columns([0.55, 0.45])
 
     with p1:
         st.markdown("### Phase 1 (Defense): Basic Patch")
         st.markdown(
-            "<div style='color:#9DA7B3; font-size:13px;'>"
-            "Minimum 'Hello' tags to prevent identity + answer failures."
-            "</div>",
+            "<div style='color:#9DA7B3; font-size:13px;'>Minimum 'Hello' tags to prevent identity + answer failures.</div>",
             unsafe_allow_html=True,
         )
         st.code(organization_jsonld_template(origin, brand), language="json")
@@ -1184,10 +1074,10 @@ if run:
 else:
     st.markdown(
         """
-<div style="background:#161b22; border:1px solid #30363D; border-radius:12px; padding:16px;">
-  <div style="font-weight:800; font-size:16px;">Run a scan to reveal your AI visibility bottlenecks</div>
+<div style="background-color:#161B22;border:1px solid #30363D;border-radius:8px;padding:16px;">
+  <div style="font-weight:700; font-size:15px; color:#E0E0E0;">Enter a domain and run the scan</div>
   <div style="color:#9DA7B3; margin-top:6px; font-size:13px;">
-    We automatically discover product pages (when possible) and diagnose why AI agents ignore your brand.
+    We auto-discover product pages (when possible) and diagnose why AI agents ignore your brand.
   </div>
 </div>
 """,
