@@ -612,14 +612,27 @@ def compute_score(org_found: bool, id_verified: bool, faq_found: bool, prod_foun
 
 def build_warnings(org_found: bool, id_verified: bool, prod_found: bool, comm_ready: bool, faq_found: bool) -> List[str]:
     warnings: List[str] = []
+
+    # CEO-friendly scary warnings (requested)
     if org_found and not id_verified:
-        warnings.append("⚠️ Identity Risk: AI models may confuse your brand with generic terms.")
+        warnings.append(
+            "⚠️ Invisible Brand Risk: AI agents (like ChatGPT) cannot definitively prove you are a real business. You risk being ignored."
+        )
     if prod_found and not comm_ready:
-        warnings.append("❌ Commerce Blocked: Missing Price/Stock data. AI cannot sell your item.")
+        warnings.append(
+            "❌ Revenue Blocked: AI cannot read your prices or stock levels. You are losing automated sales."
+        )
     if not faq_found:
-        warnings.append("⚠️ Knowledge Gap: Losing 'Answer' visibility.")
+        warnings.append(
+            "⚠️ Silent Treatment: You have no structured answers. When users ask 'What is [Brand]?', AI stays silent or hallucinates."
+        )
+
+    # Keep this one (still valuable) if Organization missing entirely
     if not org_found:
-        warnings.append("⚠️ Identity Risk: No Organization schema found. AI may not know who you are.")
+        warnings.append(
+            "⚠️ Invisible Brand Risk: AI agents cannot find a clear brand entity for your site. You risk being treated like an anonymous storefront."
+        )
+
     return warnings
 
 
@@ -643,7 +656,7 @@ def audit_page(url: str, timeout: int) -> PageAudit:
             product_found=False,
             commerce_ready=False,
             score=0,
-            warnings=[f"⚠️ Crawl Failed: If AI/search can’t fetch this page, visibility can drop. ({e})"],
+            warnings=[f"⚠️ Crawl Failed: If AI/search can’t fetch this page, your visibility and trust signals can collapse. ({e})"],
         )
 
     payloads, script_count = extract_jsonld_payloads(html)
@@ -664,7 +677,9 @@ def audit_page(url: str, timeout: int) -> PageAudit:
     warnings = build_warnings(org_found, id_verified, prod_found, comm_ready, faq_found)
 
     if script_count > 0 and len(payloads) == 0:
-        warnings.append("⚠️ Parsing Risk: JSON-LD tags exist but aren’t valid JSON. Crawlers may ignore them.")
+        warnings.append(
+            "⚠️ Executive Alert: Your site is outputting schema, but it’s malformed—AI and Google may ignore it entirely."
+        )
 
     return PageAudit(
         requested_url=url,
@@ -697,7 +712,6 @@ def infer_brand_name_from_domain(origin: str) -> str:
     """
     host = urlparse(origin).netloc.lower()
     host = host.replace("www.", "")
-    # Remove common TLD parts
     label = host.split(":")[0].split(".")[0]
     label = re.sub(r"[^a-z0-9\-]+", "", label)
     parts = [p for p in label.split("-") if p]
@@ -709,57 +723,50 @@ def infer_brand_name_from_domain(origin: str) -> str:
 def simulate_ai_response(health_score: int, identity_health: int, commerce_health: int, any_blocked: bool) -> Tuple[str, str]:
     if any_blocked:
         return (
-            "AI Simulation (Blocked Signals Detected)",
-            "I may not be able to reliably access or cite this website because AI crawlers appear to be blocked in robots.txt. "
-            "That often prevents me from verifying product availability, pricing, and even brand identity at scale.",
+            "What ChatGPT Will Do",
+            "I can’t reliably access or cite this website because AI crawlers appear to be blocked. "
+            "That means I cannot confidently verify your brand, your products, or your availability—so I will avoid recommending you.",
         )
 
     if health_score >= 85 and identity_health >= 80 and commerce_health >= 80:
         return (
-            "AI Simulation (High Confidence)",
-            "I can identify the brand clearly and I’m seeing structured product data with pricing. "
-            "If you ask me for recommendations, I can surface specific in-stock items and answer common questions with confidence.",
+            "What ChatGPT Will Do",
+            "I can verify your brand entity and I can read product pricing signals. "
+            "If a customer asks for recommendations, I can confidently surface specific products and describe them as available.",
         )
 
     if commerce_health < 50:
         return (
-            "AI Simulation (Commerce Friction)",
-            "I can find products, but I can’t reliably confirm price/stock from structured data. "
-            "That makes it harder for AI shopping experiences to recommend or ‘sell’ specific items.",
+            "What ChatGPT Will Do",
+            "I can see products, but I can’t reliably read your price/stock signals. "
+            "In an AI shopping moment, that typically means I won’t push customers to buy—because I can’t verify the sale details.",
         )
 
     if identity_health < 50:
         return (
-            "AI Simulation (Identity Confusion)",
-            "I’m seeing the site, but I can’t clearly disambiguate the brand entity from generic terms. "
-            "That increases the risk of misattribution and weaker brand citations in AI answers.",
+            "What ChatGPT Will Do",
+            "I cannot definitively prove your brand’s identity. "
+            "That increases the risk you get ignored, misattributed, or blended into generic results when customers ask about you.",
         )
 
     if health_score < 60:
         return (
-            "AI Simulation (Low Confidence)",
-            "I’m not confident I can verify this site’s key details consistently. "
-            "I might avoid quoting specific products or answering with certainty because structured signals are incomplete.",
+            "What ChatGPT Will Do",
+            "I’m not confident I can verify your business or products consistently. "
+            "In practice, I give safer, generic answers—and you lose the recommendation.",
         )
 
     return (
-        "AI Simulation (Mixed)",
-        "I can extract some useful information, but coverage is inconsistent. "
-        "With a few schema fixes, this site can become far more ‘AI readable’ for answers and shopping flows.",
+        "What ChatGPT Will Do",
+        "I can extract some information, but trust signals are inconsistent. "
+        "With a focused upgrade, you can become the obvious, verifiable choice in AI answers and AI shopping flows.",
     )
-
-
-def render_check(label: str, ok: bool, pts: str = "") -> str:
-    icon = "✅" if ok else "❌"
-    suffix = f" ({pts})" if pts else ""
-    return f"{icon} {label}{suffix}"
 
 
 # ----------------------------
 # Dynamic Action Plan (templates)
 # ----------------------------
 def organization_jsonld_template(domain: str, brand: str) -> str:
-    # Insert user's actual domain + brand
     return json.dumps(
         {
             "@context": "https://schema.org",
@@ -769,8 +776,8 @@ def organization_jsonld_template(domain: str, brand: str) -> str:
             "disambiguatingDescription": f"{brand} is the official brand website at {domain}.",
             "sameAs": [
                 f"{domain}/about",
-                f"{domain}/contact"
-            ]
+                f"{domain}/contact",
+            ],
         },
         indent=2,
         ensure_ascii=False,
@@ -788,7 +795,7 @@ def faqpage_jsonld_template(domain: str, brand: str) -> str:
                     "name": f"What is {brand}?",
                     "acceptedAnswer": {
                         "@type": "Answer",
-                        "text": f"{brand} is a brand available at {domain}. Replace this answer with your real FAQ content."
+                        "text": f"{brand} is a premium brand available at {domain}. Replace this with your real FAQ answer.",
                     },
                 }
             ],
@@ -805,8 +812,8 @@ st.set_page_config(page_title="Agentic Visibility Scanner", page_icon="🧠", la
 
 st.title("🧠 Agentic Visibility Scanner")
 st.caption(
-    "Lead magnet audit: checks whether your site is visible to AI Agents (ChatGPT, Perplexity, etc.). "
-    "We scan your homepage + up to 3 product-like pages for **Identity**, **Commerce**, and **Knowledge** signals."
+    "An executive-grade audit for AI visibility. We scan your homepage + up to 3 product-like pages to see whether "
+    "AI agents can **verify your brand**, **understand your products**, and **confidently recommend you**."
 )
 
 with st.sidebar:
@@ -829,7 +836,6 @@ if run:
     notes: List[str] = []
     scan_urls: List[str] = []
 
-    # Progress bars will be populated after scan
     identity_health = 0
     commerce_health = 0
 
@@ -838,19 +844,19 @@ if run:
         def step(msg: str):
             status.update(label=msg, state="running")
 
-        # 2) AI Blocker check (continue scanning even if blocked)
-        step("Checking AI Blockers in /robots.txt…")
+        # AI Blocker check (continue scanning even if blocked)
+        step("Checking AI access policies (/robots.txt)…")
         any_blocked, per_bot_blocked, robots_text, robots_err = check_ai_blockers(origin, timeout=timeout)
 
         if robots_err:
-            notes.append(f"⚠️ robots.txt could not be fetched ({robots_err}) — proceeding anyway.")
+            notes.append(f"⚠️ robots.txt could not be fetched ({robots_err}) — continuing anyway.")
         else:
             blocked_list = [k for k, v in per_bot_blocked.items() if v]
             if blocked_list:
-                notes.append(f"🚨 AI bots blocked in robots.txt: {', '.join(blocked_list)}")
+                notes.append(f"🚨 AI access blocked for: {', '.join(blocked_list)}")
 
-        # 1) Hybrid crawler (Universal + Turbo)
-        step("Discovering homepage + up to 3 product-like pages…")
+        # Hybrid crawler
+        step("Discovering high-value pages (homepage + product pages)…")
         try:
             homepage_url, product_urls, crawl_notes = discover_home_and_products(origin, timeout=timeout, status_cb=step)
             notes.extend(crawl_notes)
@@ -864,15 +870,15 @@ if run:
             nu = normalize_url(u)
             if nu not in scan_urls and not is_disallowed_asset(nu) and not nu.lower().endswith(".xml"):
                 scan_urls.append(nu)
-        scan_urls = scan_urls[:4]  # homepage + 3 max
+        scan_urls = scan_urls[:4]
 
         if len(scan_urls) < 2:
-            notes.append("⚠️ Only the homepage could be queued. Product discovery returned 0 URLs.")
+            notes.append("⚠️ We could only scan your homepage. Product discovery returned 0 URLs.")
 
         # Audit pages
-        step(f"Auditing {len(scan_urls)} page(s)…")
+        step(f"Running AI visibility audit on {len(scan_urls)} page(s)…")
         for i, u in enumerate(scan_urls, start=1):
-            step(f"Scanning page {i}/{len(scan_urls)}…")
+            step(f"Auditing page {i}/{len(scan_urls)}…")
             audits.append(audit_page(u, timeout=timeout))
             time.sleep(0.05)
 
@@ -881,16 +887,16 @@ if run:
     # ----------------------------
     # Results
     # ----------------------------
-    st.subheader("Results")
+    st.subheader("Executive Summary")
 
     if any_blocked:
-        st.error("🚨 **CRITICAL ERROR: AI BLOCKED** — Your robots.txt blocks major AI crawlers. This can crater agentic visibility.")
+        st.error("🚨 **CRITICAL ERROR: AI BLOCKED** — You have explicitly blocked major AI agents. This is a direct visibility kill-switch.")
         blocked_list = [k for k, v in per_bot_blocked.items() if v]
         if blocked_list:
-            st.warning(f"Blocked bots detected: {', '.join(blocked_list)}")
-        st.info("We still ran the schema audit below so you can see what you’re missing once access is restored.")
+            st.warning(f"Blocked AI agents: {', '.join(blocked_list)}")
+        st.info("We still ran the audit so you can see what your site is missing once access is restored.")
 
-    with st.expander("Crawler Notes + Pages Scanned", expanded=False):
+    with st.expander("Scan Details (Pages + Discovery Notes)", expanded=False):
         for n in notes:
             st.write(n)
         st.write("**Pages scanned:**")
@@ -900,7 +906,7 @@ if run:
     health_score = round(sum(a.score for a in audits) / len(audits)) if audits else 0
     st.markdown(f"### Agentic Health Score: `{health_score}/100`")
 
-    # Aggregate warnings (dedupe)
+    # Aggregate warnings
     agg_warnings: List[str] = []
     seen_warns: Set[str] = set()
     for a in audits:
@@ -910,16 +916,16 @@ if run:
                 agg_warnings.append(w)
 
     if health_score < 80 and agg_warnings:
-        st.markdown("#### Critical Alerts")
+        st.markdown("#### What’s Costing You Visibility (Right Now)")
         for w in agg_warnings:
             if w.startswith("❌"):
                 st.error(w)
             else:
                 st.warning(w)
     elif health_score >= 80:
-        st.success("✅ Strong baseline. You’re ahead of most sites on AI-readiness.")
+        st.success("✅ Strong position. AI agents can verify you more reliably than most competitors.")
     else:
-        st.info("Mixed signals detected. Fixing schema gaps usually boosts AI visibility quickly.")
+        st.info("Your signals are inconsistent. This is exactly where competitors steal your AI visibility.")
 
     # Category health
     identity_pass = sum(1 for a in audits if a.org_found and a.identity_verified)
@@ -929,26 +935,27 @@ if run:
     commerce_pass = sum(1 for a in product_pages if a.commerce_ready)
     commerce_health = pct(commerce_pass, len(product_pages)) if product_pages else 0
 
-    st.markdown("#### Category Health")
+    st.markdown("#### Signal Strength")
     col1, col2 = st.columns(2)
     with col1:
-        st.caption("Identity Health")
+        st.caption("Identity Health (Can AI prove you’re real?)")
         st.progress(identity_health)
         st.write(f"**{identity_health}%**")
     with col2:
-        st.caption("Commerce Ready")
+        st.caption("Commerce Readiness (Can AI confidently ‘sell’ you?)")
         st.progress(commerce_health)
         st.write(f"**{commerce_health}%**")
 
-    # AI Simulation
+    # AI Simulation (dramatic)
     st.markdown("---")
-    st.markdown("### AI Simulation")
+    st.markdown("## 🔮 The 'ChatGPT Test'")
+    st.caption("If a potential customer asks AI about your brand right now, here is exactly what happens:")
     sim_title, sim_msg = simulate_ai_response(health_score, identity_health, commerce_health, any_blocked=any_blocked)
     st.chat_message("assistant").write(f"**{sim_title}**\n\n{sim_msg}")
 
-    # Detailed Findings per URL
+    # Detailed Findings per URL (CEO-friendly scorecard strings)
     st.markdown("---")
-    st.markdown("### Detailed Findings")
+    st.markdown("## Detailed Scorecard by Page")
 
     for a in audits:
         with st.expander(f"{a.final_url} — {a.score}/100", expanded=False):
@@ -958,69 +965,73 @@ if run:
 
             c1, c2 = st.columns(2)
             with c1:
-                st.write(render_check("Organization schema", a.org_found, "+10"))
-                st.write(render_check("FAQPage found", a.faq_found, "+20"))
-                st.write(render_check("Product schema", a.product_found, "+20"))
+                st.write("✅ Brand Entity Signal: DETECTED" if a.org_found else "❌ Brand Entity Signal: MISSING")
+                st.write("✅ Answer Engine: ACTIVE" if a.faq_found else "❌ Answer Engine: INACTIVE")
+                st.write("✅ Product Intelligence: DETECTED" if a.product_found else "❌ Product Intelligence: MISSING")
             with c2:
-                st.write(render_check("Identity verified (disambiguatingDescription or sameAs)", a.identity_verified, "+20"))
-                st.write(render_check("Commerce ready (offers with price)", a.commerce_ready, "+30"))
+                st.write("✅ Authority Verification: SECURE" if a.identity_verified else "❌ Authority Verification: UNVERIFIED")
+                st.write("✅ AI Shopping Data: OPTIMIZED" if a.commerce_ready else "❌ AI Shopping Data: NOT READY")
 
             if a.warnings:
-                st.markdown("**Warnings:**")
+                st.markdown("**Executive Alerts:**")
                 for w in a.warnings:
                     if w.startswith("❌"):
                         st.error(w)
                     else:
                         st.warning(w)
             else:
-                st.success("No critical issues detected on this page.")
+                st.success("No critical blockers detected on this page.")
 
     # ----------------------------
-    # Dynamic Action Plan
+    # Dynamic Action Plan (CEO-friendly, “magic”)
     # ----------------------------
     st.markdown("---")
-    st.markdown("## 🛠️ Your Personal Fix-It Plan")
+    st.markdown("## 🚀 Your Instant Authority Upgrade")
 
     domain = origin
     brand = brand_name
 
-    # Decide what is "low" based on category health
     identity_low = identity_health < 60
-    # Commerce: if there are product pages scanned, evaluate, else treat as low if site likely sells
-    commerce_low = commerce_health < 60 if product_pages else True
+    commerce_low = (commerce_health < 60) if product_pages else True
     knowledge_low = any(not a.faq_found for a in audits)
 
     if identity_low:
-        st.markdown("### 1) Identity Fix (Organization JSON-LD)")
-        st.warning("⚠️ Identity Risk: AI models may confuse your brand with generic terms. Fix this first.")
+        st.markdown("### 1) Authority Lock-In (Identity)")
+        st.write(
+            f"We generated this custom **'Authority Code'** specifically for **{brand}**. "
+            "Copying this into your site is the fastest way to force AI to recognize you."
+        )
         org_snippet = organization_jsonld_template(domain=domain, brand=brand)
         st.code(org_snippet, language="json")
-        st.caption("Add this to your homepage (or site-wide) as a JSON-LD script tag. Update sameAs links to your real profiles/pages.")
-
+        st.caption("Add this JSON-LD to your homepage (or site-wide). Replace sameAs links with your real social/press profiles for maximum authority.")
     else:
-        st.success("✅ Identity looks solid. Organization schema is present and disambiguated.")
+        st.success("✅ Authority looks secure. AI can verify your brand entity across the pages we scanned.")
 
     if knowledge_low:
-        st.markdown("### 2) Knowledge Fix (FAQPage JSON-LD)")
-        st.warning("⚠️ Knowledge Gap: Losing 'Answer' visibility. Add a small FAQPage schema to key pages.")
+        st.markdown("### 2) Become the Default Answer (Knowledge)")
+        st.write(
+            "Right now, when people ask AI basic questions about your brand, you’re not controlling the answer. "
+            "This lightweight schema turns your site into a reliable ‘source of truth’."
+        )
         faq_snippet = faqpage_jsonld_template(domain=domain, brand=brand)
         st.code(faq_snippet, language="json")
-        st.caption("Replace the placeholder Q&A with your real FAQs. You can add this to your homepage or a dedicated FAQ page.")
+        st.caption("Replace the example Q&A with real questions customers ask. Even 3–5 FAQs can dramatically improve AI answer visibility.")
     else:
-        st.success("✅ FAQPage schema detected on scanned pages.")
+        st.success("✅ Answer Engine is active. We detected FAQPage schema on the pages scanned.")
 
     if commerce_low:
-        st.markdown("### 3) Commerce Fix (Offers / Price / Stock)")
-        st.error("❌ Commerce Blocked: Missing Price/Stock data. AI cannot sell your item.")
+        st.markdown("### 3) Unlock AI-Powered Revenue (Commerce)")
+        st.error("❌ Revenue Blocked: AI cannot read your prices or stock levels. You are losing automated sales.")
         st.info(
-            "Product schema is often generated by your platform/theme/apps and can be complex (variants, currency, availability). "
-            "This usually requires a developer or a schema app to ensure every product includes **offers** with **price** and **availability**."
+            "Commerce schema is inherently complex (variants, currency, availability, sale price). "
+            "This usually requires a developer or a dedicated schema app to ensure **every product** publishes clean `offers` data. "
+            "Once it’s fixed, AI shopping flows can confidently recommend and route buyers to checkout."
         )
     else:
-        st.success("✅ Commerce signals look strong (offers with price detected).")
+        st.success("✅ AI Shopping Data looks optimized. Offers with price were detected on product pages.")
 
     # CTA
     st.markdown("---")
-    st.markdown("### Ready to fix this in 15 minutes?")
-    st.caption("If your score is low, you’re likely losing AI attribution, 'answer' visibility, and automated shopping readiness.")
+    st.markdown("### Want this fixed fast?")
+    st.caption("If you want the shortest path to higher AI visibility (and fewer lost sales), we can implement the upgrade end-to-end.")
     st.link_button("👉 Book Your Fix (15 Min)", "https://calendly.com", use_container_width=True)
