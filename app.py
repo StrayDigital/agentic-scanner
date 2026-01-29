@@ -1,4 +1,4 @@
-# app.py — Premium Agentic Infrastructure Audit (GTmetrix for AI SEO)
+# app.py — Premium Agentic Infrastructure Audit (Vercel-style Dark Mode)
 # Dependencies: streamlit, requests, beautifulsoup4, urllib.parse, re, json, time, datetime
 #
 # Install:
@@ -20,147 +20,158 @@ from bs4 import BeautifulSoup
 
 
 # ----------------------------
-# DESIGN SYSTEM (Dark / Glass / Cyber)
+# Premium UI (Vercel-style Dark Mode)
 # ----------------------------
-st.set_page_config(page_title="Agentic Infrastructure Audit", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="Agentic Infrastructure Audit", page_icon="🧠", layout="centered")
 
 st.markdown(
     """
 <style>
-/* Typography */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html, body, [class*="css"]  {
-  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+
+html, body, [class*="css"] {
+  font-family: 'Inter', sans-serif !important;
 }
 
-/* App background */
 .stApp {
-  background: radial-gradient(1200px 800px at 10% 10%, rgba(0,255,255,0.07), rgba(14,17,23,0)) ,
-              radial-gradient(1000px 700px at 90% 20%, rgba(255,0,128,0.06), rgba(14,17,23,0)) ,
-              #0e1117;
-  color: #ffffff;
+  background: #0E1117;
+  color: #E6EDF3;
 }
 
-/* Headings */
-h1, h2, h3 {
-  letter-spacing: -0.02em;
-}
-
-/* Glass cards helper */
-.glass-card {
-  background: rgba(22, 26, 34, 0.65);
-  border: 1px solid #262730;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 12px;
-  padding: 16px 16px;
-}
-
-/* Metric styling (Streamlit renders metric inside a container; we wrap in our own glass-card) */
-.metric-big .label {
-  font-size: 12px;
-  opacity: 0.8;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.metric-big .value {
-  font-size: 44px;
-  font-weight: 700;
-  line-height: 1.05;
-  margin-top: 6px;
-}
-.metric-big .delta {
-  font-size: 12px;
-  opacity: 0.8;
-  margin-top: 8px;
-}
-
-/* Progress bars gradient */
-div[data-testid="stProgress"] > div > div > div {
-  background: linear-gradient(90deg, #00e5a8 0%, #00b3ff 60%, #7c3aed 100%) !important;
-}
-div[data-testid="stProgress"] {
-  background-color: rgba(255,255,255,0.08) !important;
-  border-radius: 999px !important;
-  height: 10px !important;
-}
-div[data-testid="stProgress"] > div {
-  border-radius: 999px !important;
-}
-
-/* Expander styling */
-details {
-  background: rgba(18, 22, 30, 0.75) !important;
-  border: 1px solid #262730 !important;
-  border-radius: 12px !important;
-  padding: 8px 12px !important;
-}
-details summary {
-  font-weight: 600 !important;
-  color: #ffffff !important;
-}
-details[open] {
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35) !important;
-}
-
-/* Buttons (make primary look urgent) */
-div.stButton > button[kind="primary"] {
-  width: 100% !important;
-  border: none !important;
-  border-radius: 12px !important;
-  color: white !important;
-  font-weight: 700 !important;
-  padding: 0.8rem 1rem !important;
-  background: linear-gradient(90deg, #ff2d55 0%, #ff6a00 100%) !important;
-  box-shadow: 0 10px 30px rgba(255,45,85,0.18) !important;
-}
-div.stButton > button[kind="primary"]:hover {
-  filter: brightness(1.05);
-  transform: translateY(-1px);
-}
-div.stButton > button {
-  border-radius: 12px !important;
-}
-
-/* Link button (Streamlit uses <a> inside container) */
-a[data-testid="stLinkButton"] {
-  width: 100% !important;
-  display: inline-flex !important;
-  justify-content: center !important;
-  border-radius: 12px !important;
-  border: 1px solid #262730 !important;
-  padding: 0.8rem 1rem !important;
-  font-weight: 700 !important;
-  color: #ffffff !important;
-  background: rgba(22, 26, 34, 0.65) !important;
-  text-decoration: none !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.25) !important;
-}
-a[data-testid="stLinkButton"]:hover {
-  border-color: rgba(0,179,255,0.7) !important;
-  box-shadow: 0 10px 30px rgba(0,179,255,0.12) !important;
+/* Center + max width container */
+.block-container {
+  max-width: 900px;
+  padding-top: 2rem !important;
+  padding-bottom: 3rem !important;
 }
 
 /* Inputs */
 div[data-testid="stTextInput"] input {
-  border-radius: 12px !important;
-  border: 1px solid #262730 !important;
-  background: rgba(18, 22, 30, 0.75) !important;
-  color: #ffffff !important;
+  background: transparent !important;
+  border: 1px solid #30363D !important;
+  border-radius: 10px !important;
+  color: #E6EDF3 !important;
+  padding: 0.7rem 0.9rem !important;
 }
 
-/* Alerts */
-div[data-testid="stAlert"] {
-  border-radius: 12px !important;
-  border: 1px solid #262730 !important;
-  background: rgba(18, 22, 30, 0.75) !important;
+div[data-testid="stTextInput"] label {
+  color: #E6EDF3 !important;
+  opacity: 0.9;
 }
 
-/* Reduce default padding */
-.block-container {
-  padding-top: 1.2rem !important;
-  padding-bottom: 2.5rem !important;
+/* Button */
+div.stButton > button {
+  width: 100% !important;
+  background: linear-gradient(45deg, #2ecc71, #3498db) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  transition: all 0.3s ease !important;
+  padding: 0.8rem 1rem !important;
+}
+
+div.stButton > button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+/* Metric cards */
+div[data-testid="stMetric"] {
+  background: #161b22 !important;
+  border: 1px solid #30363D !important;
+  border-radius: 12px !important;
+  padding: 14px 14px !important;
+}
+
+div[data-testid="stMetricLabel"] {
+  color: #9DA7B3 !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+}
+
+div[data-testid="stMetricValue"] {
+  color: #E6EDF3 !important;
+  font-weight: 800 !important;
+}
+
+/* Expanders */
+details {
+  background: #161b22 !important;
+  border: 1px solid #30363D !important;
+  border-radius: 12px !important;
+  padding: 8px 12px !important;
+}
+
+details summary {
+  color: #E6EDF3 !important;
+  font-weight: 700 !important;
+}
+
+hr {
+  border-color: rgba(48,54,61,0.55) !important;
+}
+
+/* Custom thick gauge */
+.gauge-wrap {
+  background: #161b22;
+  border: 1px solid #30363D;
+  border-radius: 12px;
+  padding: 14px;
+}
+.gauge-title {
+  color: #9DA7B3;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.gauge-row {
+  display:flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.gauge-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #E6EDF3;
+}
+.gauge-sub {
+  font-size: 12px;
+  color: #9DA7B3;
+  margin-top: 6px;
+}
+.gauge-bar {
+  margin-top: 10px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(230,237,243,0.08);
+  overflow: hidden;
+}
+.gauge-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff4d4d 0%, #ff9f1a 55%, #f1c40f 100%);
+}
+
+/* Link button */
+a[data-testid="stLinkButton"] {
+  width: 100% !important;
+  display: inline-flex !important;
+  justify-content: center !important;
+  border-radius: 10px !important;
+  border: 1px solid #30363D !important;
+  padding: 0.85rem 1rem !important;
+  font-weight: 800 !important;
+  color: #E6EDF3 !important;
+  background: transparent !important;
+  text-decoration: none !important;
+}
+a[data-testid="stLinkButton"]:hover {
+  border-color: rgba(52,152,219,0.9) !important;
+  box-shadow: 0 6px 20px rgba(52,152,219,0.15) !important;
 }
 </style>
 """,
@@ -435,19 +446,15 @@ def crawl_sitemaps_for_products(
 # ----------------------------
 # HYBRID CRAWLER ENGINE
 # ----------------------------
-def discover_home_and_products(origin: str, timeout: int, status_cb=None) -> Tuple[str, List[str], List[str], bool]:
+def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str], List[str], bool]:
     notes: List[str] = []
     sitemap_reachable = False
 
-    if status_cb:
-        status_cb("Fetching homepage…")
     home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
     homepage_url = normalize_url(home_final)
 
     # Step 1: Shopify Turbo
     try:
-        if status_cb:
-            status_cb("Shopify Turbo: checking /sitemap_products_1.xml…")
         turbo_url = urljoin(origin, SHOPIFY_SITEMAP_PRODUCTS_PATH)
         _, xml_text = fetch_text(turbo_url, timeout=timeout)
         sitemap_reachable = True
@@ -474,29 +481,23 @@ def discover_home_and_products(origin: str, timeout: int, status_cb=None) -> Tup
 
     # Step 2: Universal sitemap.xml recursive
     try:
-        if status_cb:
-            status_cb("Universal: crawling /sitemap.xml recursively…")
         sm_url = urljoin(origin, UNIVERSAL_SITEMAP_PATH)
         products, sm_notes = crawl_sitemaps_for_products(sm_url, origin=origin, timeout=timeout, max_product_urls=3)
-        sitemap_reachable = sitemap_reachable or ("Found" in " ".join(sm_notes)) or (len(products) > 0)
         notes.extend(sm_notes)
         if products:
+            sitemap_reachable = True
             return homepage_url, products, notes, sitemap_reachable
     except Exception as e:
         notes.append(f"⚠️ Universal sitemap failed: {e}")
 
     # Step 3: robots.txt sitemap fallbacks
     try:
-        if status_cb:
-            status_cb("Fallback: checking robots.txt for sitemap URLs…")
         robots_text, _ = fetch_robots(origin, timeout=timeout)
         if robots_text:
             sm_urls = discover_sitemaps_from_robots(robots_text)
             if sm_urls:
                 notes.append(f"ℹ️ robots.txt lists {len(sm_urls)} sitemap URL(s)")
                 for sm in sm_urls:
-                    if status_cb:
-                        status_cb("Fallback: crawling robots.txt sitemap…")
                     products, sm_notes = crawl_sitemaps_for_products(sm, origin=origin, timeout=timeout, max_product_urls=3)
                     notes.extend(sm_notes)
                     if products:
@@ -511,8 +512,6 @@ def discover_home_and_products(origin: str, timeout: int, status_cb=None) -> Tup
         notes.append(f"⚠️ robots.txt fallback failed: {e}")
 
     # Step 4: scrape homepage fallback
-    if status_cb:
-        status_cb("Last resort: scanning homepage links for product pages…")
     soup = BeautifulSoup(home_html, "lxml")
     candidates: List[str] = []
     for a in soup.find_all("a", href=True):
@@ -756,7 +755,7 @@ def authority_tier1_present(org_obj: Dict[str, Any]) -> bool:
 
 
 # ----------------------------
-# PAGE AUDIT (with Ghost Code scoring override)
+# PAGE AUDIT (with Ghost Code override)
 # ----------------------------
 def audit_page(url: str, timeout: int) -> PageAudit:
     try:
@@ -786,7 +785,7 @@ def audit_page(url: str, timeout: int) -> PageAudit:
     visible_text = soup.get_text(" ", strip=True)
     text_len = len(visible_text)
 
-    # Ghost Code Detector (Critical)
+    # Ghost Code Detector (Critical) -> automatic 0
     ghost = text_len < 600
 
     payloads, script_count = extract_jsonld_payloads(html)
@@ -806,11 +805,9 @@ def audit_page(url: str, timeout: int) -> PageAudit:
     base_score = compute_score(org_found, id_verified, faq_found, prod_found, comm_ready)
 
     warnings: List[str] = []
-
     if script_count > 0 and len(payloads) == 0:
         warnings.append("⚠️ Schema Parsing Error: JSON-LD tags exist but appear malformed. AI may ignore them.")
 
-    # Apply Ghost scoring override
     if ghost:
         warnings.append("⚠️ Render Blocking: Client-Side JavaScript detected.")
         warnings.append("Impact: Severe. AI Agents see a blank page.")
@@ -859,7 +856,6 @@ def extract_homepage_title_h1(home_html: str) -> Tuple[str, str]:
 
 
 def recency_ok(title_text: str, h1_text: str) -> bool:
-    # Explicitly check for '2025' or '2026' as requested
     hay = f"{title_text} {h1_text}"
     return ("2025" in hay) or ("2026" in hay)
 
@@ -917,52 +913,57 @@ def faqpage_jsonld_template(domain: str, brand: str) -> str:
 # ----------------------------
 # UI HELPERS
 # ----------------------------
-def pct(n: int, d: int) -> int:
-    if d <= 0:
-        return 0
-    return max(0, min(100, int(round(100 * n / d))))
-
-
-def metric_card(label: str, value: str, delta: Optional[str] = None, help_text: Optional[str] = None):
-    delta_html = f'<div class="delta">{delta}</div>' if delta else ""
-    help_html = f'<div style="margin-top:6px; opacity:0.78; font-size:12px;">{help_text}</div>' if help_text else ""
-    st.markdown(
-        f"""
-<div class="glass-card metric-big">
-  <div class="label">{label}</div>
-  <div class="value">{value}</div>
-  {delta_html}
-  {help_html}
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-
 def passfail(ok: bool) -> str:
     return "✅ PASS" if ok else "❌ FAIL"
 
 
-# ----------------------------
-# APP LAYOUT
-# ----------------------------
-left, right = st.columns([1.35, 1])
+def leakage_gauge_html(leakage_pct: int) -> str:
+    leakage_pct = max(0, min(100, int(leakage_pct)))
+    return f"""
+<div class="gauge-wrap">
+  <div class="gauge-title">📉 Estimated AI Traffic Leakage</div>
+  <div class="gauge-row">
+    <div class="gauge-value">{leakage_pct}%</div>
+    <div style="color:#9DA7B3; font-size:12px; font-weight:600;">Market Readiness</div>
+  </div>
+  <div class="gauge-bar">
+    <div class="gauge-fill" style="width:{leakage_pct}%"></div>
+  </div>
+  <div class="gauge-sub">Percentage of intent-based queries where your brand is ignored due to technical gaps.</div>
+</div>
+"""
 
-with left:
+
+# ----------------------------
+# HEADER LAYOUT (70/30)
+# ----------------------------
+header_left, header_right = st.columns([0.7, 0.3], vertical_alignment="bottom")
+
+with header_left:
     st.markdown("## Agentic Infrastructure Audit")
     st.markdown(
-        "<div style='opacity:0.8; font-size:14px;'>The GTmetrix for AI SEO — identify why AI agents ignore your brand, and what breaks visibility.</div>",
+        "<div style='color:#9DA7B3; font-size:14px; margin-top:-4px;'>"
+        "A premium AEO diagnostic: render accessibility, freshness signals, entity clarity, and trust authority."
+        "</div>",
         unsafe_allow_html=True,
     )
 
-with right:
-    with st.container():
-        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<div style='font-weight:700; font-size:14px; opacity:0.9;'>Scan Target</div>", unsafe_allow_html=True)
-        site_url = st.text_input("", placeholder="https://example.com", label_visibility="collapsed")
-        timeout = st.slider("Request timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
-        run = st.button("Run Scan", type="primary")
-        st.markdown("</div>", unsafe_allow_html=True)
+with header_right:
+    # Button already defined by Streamlit below; keep this column for a clean layout.
+    # We'll render inputs and button just under the header, but align the button to the right column.
+    pass
+
+st.markdown("")
+
+# Inputs row aligned like Vercel: input wide + button at right
+in_left, in_right = st.columns([0.7, 0.3], vertical_alignment="bottom")
+with in_left:
+    site_url = st.text_input("Website URL", value="", placeholder="https://example.com")
+with in_right:
+    run = st.button("Run Scan", type="primary")
+
+with st.expander("Advanced Settings", expanded=False):
+    timeout = st.slider("Request timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
 
 st.markdown("---")
 
@@ -974,7 +975,7 @@ if run:
 
     brand = infer_brand_name_from_domain(origin)
 
-    # Layer 0: Infrastructure checks
+    # Infrastructure: robots
     robots_text, robots_err = fetch_robots(origin, timeout=timeout)
     robots_access = robots_text is not None
     per_bot_blocked: Dict[str, bool] = {a: False for a in AI_BOTS}
@@ -983,7 +984,6 @@ if run:
         per_bot_blocked = parse_robots_for_blocks(robots_text, AI_BOTS)
         any_ai_blocked = any(per_bot_blocked.values())
 
-    # Crawl + audit
     notes: List[str] = []
     audits: List[PageAudit] = []
     scan_urls: List[str] = []
@@ -993,13 +993,8 @@ if run:
     sitemap_reachable = False
     found_products = False
 
-    with st.status("Running audit…", expanded=True) as status:
-
-        def step(msg: str):
-            status.update(label=msg, state="running")
-
-        # Fetch homepage
-        step("Fetching homepage…")
+    with st.status("Running scan…", expanded=False) as status:
+        status.update(label="Fetching homepage…", state="running")
         try:
             home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
             homepage_url = normalize_url(home_final)
@@ -1008,10 +1003,9 @@ if run:
             st.error(f"Homepage fetch failed: {e}")
             st.stop()
 
-        # Discover pages
-        step("Discovering product pages (Hybrid crawler)…")
+        status.update(label="Discovering product pages (Hybrid crawler)…", state="running")
         try:
-            discovered_home, product_urls, crawl_notes, sitemap_reachable = discover_home_and_products(origin, timeout=timeout, status_cb=step)
+            discovered_home, product_urls, crawl_notes, sitemap_reachable = discover_home_and_products(origin, timeout=timeout)
             notes.extend(crawl_notes)
             homepage_url = normalize_url(discovered_home) if discovered_home else homepage_url
         except Exception as e:
@@ -1024,24 +1018,22 @@ if run:
             if nu not in scan_urls and (not is_disallowed_asset(nu)) and (not nu.lower().endswith(".xml")):
                 scan_urls.append(nu)
         scan_urls = scan_urls[:4]
-
         found_products = len(scan_urls) > 1
 
-        # Audit pages
-        step(f"Auditing {len(scan_urls)} page(s)…")
+        status.update(label=f"Auditing {len(scan_urls)} page(s)…", state="running")
         for i, u in enumerate(scan_urls, start=1):
-            step(f"Scanning {i}/{len(scan_urls)}…")
+            status.update(label=f"Auditing {i}/{len(scan_urls)}…", state="running")
             audits.append(audit_page(u, timeout=timeout))
             time.sleep(0.05)
 
-        status.update(label="Audit complete.", state="complete")
+        status.update(label="Complete.", state="complete")
 
     # Semantic checks on homepage
     title_text, h1_text = extract_homepage_title_h1(home_html)
-    recency_pass = recency_ok(title_text, h1_text)  # '2025'/'2026'
+    recency_pass = recency_ok(title_text, h1_text)
     entity_pass = brand_in_h1(brand, h1_text)
 
-    # Authority check (Tier 1 sources) across scanned pages: any Organization sameAs w/ Tier1
+    # Authority check across scanned pages (Tier 1 sources)
     authority_pass = False
     org_seen_any = False
     for a in audits:
@@ -1060,85 +1052,60 @@ if run:
                 authority_pass = True
                 break
 
-    # Compute health score (average across pages)
-    health_score = round(sum(a.score for a in audits) / len(audits)) if audits else 0
-    leakage = max(0, min(100, 100 - health_score))
-
-    # Ghost driver (Rendering latency): any page ghosted (and thus scored 0)
+    # Drivers
     ghost_driver = any(a.ghost for a in audits if a.ok_fetch)
+    trust_driver_fail = (not authority_pass) or (not org_seen_any)
 
-    # Schema layer presence (site-wide)
+    # Schema layer presence
     org_present = any(a.org_found for a in audits if a.ok_fetch)
     product_present = any(a.product_found for a in audits if a.ok_fetch)
     faq_present = any(a.faq_found for a in audits if a.ok_fetch)
-
-    # Commerce readiness (site-wide): any product with offers
     commerce_ready = any(a.commerce_ready for a in audits if a.ok_fetch)
 
-    # Layer 1: Scorecard (High Level)
-    c1, c2, c3 = st.columns([1, 1, 1])
+    # Health score
+    health_score = round(sum(a.score for a in audits) / len(audits)) if audits else 0
+    leakage = max(0, min(100, 100 - health_score))
 
-    with c1:
-        metric_card(
-            "Agentic Health Score",
-            f"{health_score}/100",
-            delta=f"Industry Avg: {INDUSTRY_AVERAGE_SCORE}/100",
-            help_text="A composite score of visibility, trust, and commerce readability for AI agents.",
-        )
-
-    with c2:
-        metric_card(
-            "📉 Estimated AI Traffic Leakage",
-            f"{leakage}%",
-            delta="Market Readiness Gauge",
-            help_text="Percentage of intent-based queries where your brand is ignored due to technical gaps.",
-        )
-
-    with c3:
-        blocked_list = [k for k, v in per_bot_blocked.items() if v]
-        if any_ai_blocked:
-            metric_card(
-                "AI Crawl Access",
-                "BLOCKED",
-                delta="🚨 robots.txt disallows major agents",
-                help_text=f"Blocked agents: {', '.join(blocked_list)}",
-            )
-        else:
-            metric_card(
-                "AI Crawl Access",
-                "OPEN",
-                delta="robots.txt not blocking major agents",
-                help_text="This does not guarantee crawling, but removes a hard visibility barrier.",
-            )
+    # ----------------------------
+    # LAYER 1: SCORECARD
+    # ----------------------------
+    sc1, sc2 = st.columns([0.5, 0.5])
+    with sc1:
+        st.metric("Agentic Health Score", f"{health_score}/100", f"Industry Avg: {INDUSTRY_AVERAGE_SCORE}/100")
+    with sc2:
+        st.markdown(leakage_gauge_html(leakage), unsafe_allow_html=True)
 
     st.markdown("")
 
-    # Layer 2: Top Invisibility Drivers (only show failures)
+    if any_ai_blocked:
+        blocked_list = [k for k, v in per_bot_blocked.items() if v]
+        st.error(f"🚨 AI Access Blocked in robots.txt: {', '.join(blocked_list)}")
+    if ghost_driver:
+        st.warning("⚠️ Render Blocking: Client-Side JavaScript detected. Impact: Severe. AI Agents see a blank page.")
+
+    # ----------------------------
+    # LAYER 2: TOP INVISIBILITY DRIVERS (ONLY FAILS)
+    # ----------------------------
     drivers: List[Tuple[str, str]] = []
     if ghost_driver:
-        drivers.append(("Rendering Latency", "⚠️ Render Blocking: Client-Side JavaScript detected. Impact: Severe. AI Agents see a blank page."))
+        drivers.append(("Rendering Latency", "Render Blocking: Your page returns 200 OK but exposes almost no readable HTML content to fast crawlers."))
     if not recency_pass:
-        drivers.append(("Stale Signal Risk", "Outdated Metadata: Homepage Title/H1 does not signal '2025' or '2026'. AI may prioritize fresher sources."))
+        drivers.append(("Stale Signal Risk", "Outdated Metadata: Homepage Title/H1 does not explicitly signal '2025' or '2026'."))
     if not entity_pass:
-        drivers.append(("Entity Disconnect", "H1/Entity Mismatch: Brand name is not clearly present in the homepage H1. AI entity confidence drops."))
-    if org_seen_any and not authority_pass:
-        drivers.append(("Trust Vacuum", "Low Trust Authority: sameAs has no Tier-1 sources (Wikidata/Wikipedia/Crunchbase). AI trust signals are thin."))
-    if not org_seen_any:
-        drivers.append(("Trust Vacuum", "Low Trust Authority: No Organization entity detected. You have no stable identity anchor for AI."))
+        drivers.append(("Entity Disconnect", "H1/Entity Mismatch: Brand name is not clearly present in the homepage H1."))
+    if trust_driver_fail:
+        drivers.append(("Trust Vacuum", "Low Trust Authority: No Tier-1 sameAs links found (Wikidata/Wikipedia/Crunchbase)."))
 
     if drivers:
         st.markdown("### 🛑 Top Invisibility Drivers")
         for title, desc in drivers:
             st.warning(f"**{title}** — {desc}")
         st.markdown("")
-    else:
-        st.success("✅ No critical invisibility drivers detected. Your foundation is competitive.")
 
-    # Layer 3: Technical Waterfall Diagnostics
+    # ----------------------------
+    # LAYER 3: TECHNICAL WATERFALL (EXPANDABLE)
+    # ----------------------------
     with st.expander("📋 View Full Technical Diagnostics (Waterfall)", expanded=False):
-        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-
-        # Infrastructure
         st.markdown("#### Infrastructure")
         st.write(f"- **Robots.txt Access:** {passfail(robots_access)}" + ("" if robots_access else f" (error: {robots_err})"))
         st.write(f"- **AI Blocked (GPTBot/CCBot/Google-Extended):** {passfail(not any_ai_blocked)}")
@@ -1146,42 +1113,34 @@ if run:
         st.write(f"- **Render Accessibility (Ghost Code):** {passfail(not ghost_driver)}")
 
         st.markdown("---")
-
-        # Schema Layer
         st.markdown("#### Schema Layer")
         st.write(f"- **Organization (Identity tag present):** {passfail(org_present)}")
         st.write(f"- **Product (Commerce tags present):** {passfail(product_present)}")
         st.write(f"- **FAQ (Knowledge tags present):** {passfail(faq_present)}")
+        st.write(f"- **Commerce Readiness (offers/price):** {passfail(commerce_ready)}")
 
         st.markdown("---")
-
-        # Semantic Layer
         st.markdown("#### Semantic Layer")
         st.write(f"- **Metadata Recency ('2025'/'2026' detected):** {passfail(recency_pass)}")
         st.write(f"- **Entity Clarity (Brand in H1):** {passfail(entity_pass)}")
         st.write(f"- **Authority Nodes (Tier-1 links present):** {passfail(authority_pass)}")
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("")
-        st.markdown("#### Page-Level Diagnostics")
+        st.markdown("---")
+        st.markdown("#### Page-Level Detail")
         for a in audits:
             with st.expander(f"{a.final_url} — {a.score}/100", expanded=False):
                 if not a.ok_fetch:
                     st.error(a.fetch_error or "Fetch failed.")
                     continue
-
                 st.write(f"**Raw Page Size:** {a.raw_kb:.1f} KB")
                 st.write(f"**Visible Text (raw HTML):** {a.text_len} characters")
-                if a.ghost:
-                    st.error("⚠️ Render Blocking: Client-Side JavaScript detected. Impact: Severe. AI Agents see a blank page.")
+                st.write(f"**Ghost Code:** {passfail(not a.ghost)}")
                 st.write("**Schema:**")
                 st.write(f"- Organization: {passfail(a.org_found)}")
-                st.write(f"- Product: {passfail(a.product_found)}")
-                st.write(f"- FAQ: {passfail(a.faq_found)}")
                 st.write(f"- Identity Verified: {passfail(a.identity_verified)}")
-                st.write(f"- Commerce Ready (offers/price): {passfail(a.commerce_ready)}")
-
+                st.write(f"- Product: {passfail(a.product_found)}")
+                st.write(f"- Commerce Ready: {passfail(a.commerce_ready)}")
+                st.write(f"- FAQ: {passfail(a.faq_found)}")
                 if a.warnings:
                     st.markdown("**Alerts:**")
                     for w in a.warnings:
@@ -1197,15 +1156,18 @@ if run:
             st.write(f"- Title: {title_text[:220] + ('…' if len(title_text) > 220 else '')}")
             st.write(f"- H1: {h1_text[:220] + ('…' if len(h1_text) > 220 else '')}")
 
-    # Phase 1 vs Phase 2 Upsell
+    # ----------------------------
+    # PHASE 1 / PHASE 2
+    # ----------------------------
     st.markdown("---")
-
-    p1, p2 = st.columns([1, 1])
+    p1, p2 = st.columns([0.55, 0.45])
 
     with p1:
         st.markdown("### Phase 1 (Defense): Basic Patch")
         st.markdown(
-            "<div style='opacity:0.8;'>These are the minimum 'Hello' tags that prevent AI identity and answer failures.</div>",
+            "<div style='color:#9DA7B3; font-size:13px;'>"
+            "Minimum 'Hello' tags to prevent identity + answer failures."
+            "</div>",
             unsafe_allow_html=True,
         )
         st.code(organization_jsonld_template(origin, brand), language="json")
@@ -1220,21 +1182,12 @@ if run:
         st.link_button("👉 Book Your Phase 2 Strategy Call", "https://calendly.com", use_container_width=True)
 
 else:
-    # Landing state (dashboard-style)
     st.markdown(
         """
-<div class="glass-card">
-  <div style="display:flex; gap:14px; align-items:flex-start;">
-    <div style="font-size:28px;">🧠</div>
-    <div>
-      <div style="font-weight:700; font-size:18px;">Run a scan to reveal your AI visibility bottlenecks</div>
-      <div style="opacity:0.78; margin-top:6px; font-size:14px;">
-        This audit finds why AI agents ignore your pages: rendering barriers, stale signals, entity mismatch, and trust authority gaps.
-      </div>
-      <div style="opacity:0.72; margin-top:10px; font-size:12px;">
-        Tip: Start with your root domain (e.g., example.com). We'll auto-discover product pages where possible.
-      </div>
-    </div>
+<div style="background:#161b22; border:1px solid #30363D; border-radius:12px; padding:16px;">
+  <div style="font-weight:800; font-size:16px;">Run a scan to reveal your AI visibility bottlenecks</div>
+  <div style="color:#9DA7B3; margin-top:6px; font-size:13px;">
+    We automatically discover product pages (when possible) and diagnose why AI agents ignore your brand.
   </div>
 </div>
 """,
