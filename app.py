@@ -1,6 +1,6 @@
-# app.py — Agentic Infrastructure Audit (PageSpeed-style, clean white UI)
+# app.py — Agentic Infrastructure Audit (WordLift-style Gauges + Insight Grid)
 # Requirements:
-#   pip install streamlit requests beautifulsoup4 lxml streamlit-extras
+#   pip install streamlit requests beautifulsoup4 lxml streamlit-extras plotly
 # Run:
 #   streamlit run app.py
 
@@ -14,11 +14,12 @@ from urllib.parse import urljoin, urlparse
 import requests
 import streamlit as st
 from bs4 import BeautifulSoup
-from streamlit_extras.metric_cards import style_metric_cards
+from streamlit_extras.metric_cards import style_metric_cards  # kept (still useful for any metrics used)
+import plotly.graph_objects as go
 
 
 # ----------------------------
-# Page config (native, clean, high-contrast)
+# Page config
 # ----------------------------
 st.set_page_config(page_title="Agentic Infrastructure Audit", page_icon="📈", layout="centered")
 
@@ -44,7 +45,6 @@ DISALLOWED_EXTS = (
     ".css", ".js", ".json", ".xml",
 )
 
-# For "Trust & Entity": socials are weak vs tier1, but requested is socials/sameAs detection
 SOCIAL_DOMAINS = (
     "instagram.com",
     "facebook.com",
@@ -111,6 +111,45 @@ class SiteAudit:
     # Trust & Entity insight (aggregated across scanned pages)
     org_present_any: bool
     sameas_social_links: List[str]
+
+
+# ----------------------------
+# Gauge helper (Plotly)
+# ----------------------------
+def create_gauge(score: int, title: str) -> go.Figure:
+    score = int(max(0, min(100, score)))
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=score,
+            title={"text": title, "font": {"size": 14}},
+            number={"font": {"size": 34}},
+            gauge={
+                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "rgba(0,0,0,0.25)"},
+                "bar": {"color": "rgba(0,0,0,0.55)"},
+                "bgcolor": "rgba(0,0,0,0)",
+                "borderwidth": 0,
+                "steps": [
+                    {"range": [0, 40], "color": "rgba(231,76,60,0.75)"},    # Red
+                    {"range": [40, 70], "color": "rgba(241,196,15,0.75)"},  # Yellow
+                    {"range": [70, 100], "color": "rgba(46,204,113,0.75)"}, # Green
+                ],
+                "threshold": {
+                    "line": {"color": "rgba(0,0,0,0.65)", "width": 3},
+                    "thickness": 0.75,
+                    "value": score,
+                },
+            },
+        )
+    )
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=240,
+        font=dict(size=12),
+    )
+    return fig
 
 
 # ----------------------------
@@ -224,7 +263,7 @@ def crawl_sitemap_for_products(sitemap_url: str, origin: str, timeout: int, limi
     found: List[str] = []
     seen: Set[str] = set()
 
-    final, xml, err = safe_fetch_text(sitemap_url, timeout)
+    _, xml, err = safe_fetch_text(sitemap_url, timeout)
     if err or not xml:
         notes.append(f"⚠️ Sitemap fetch failed: {sitemap_url} ({err})")
         return [], notes
@@ -271,7 +310,6 @@ def discover_from_homepage_scrape(origin: str, home_html: str, limit: int = 3) -
 
 def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str], List[str]]:
     notes: List[str] = []
-
     home_final, home_html = fetch_text(urljoin(origin, "/"), timeout=timeout)
     homepage_url = normalize_url(home_final)
 
@@ -290,7 +328,7 @@ def discover_home_and_products(origin: str, timeout: int) -> Tuple[str, List[str
         return homepage_url, sm_found, notes
 
     # Step 3: Robots -> sitemap lines (lightweight)
-    robots_final, robots_text, robots_err = safe_fetch_text(urljoin(origin, "/robots.txt"), timeout)
+    _, robots_text, robots_err = safe_fetch_text(urljoin(origin, "/robots.txt"), timeout)
     if robots_text:
         sitemap_lines = []
         for line in robots_text.splitlines():
@@ -327,7 +365,6 @@ def try_parse_json(raw: str) -> Optional[Any]:
         return json.loads(raw)
     except Exception:
         pass
-    # remove comments + trailing commas fallback
     no_comments = re.sub(r"//.*?$|/\*.*?\*/", "", raw, flags=re.MULTILINE | re.DOTALL).strip()
     no_trailing_commas = re.sub(r",\s*([}\]])", r"\1", no_comments)
     try:
@@ -381,7 +418,6 @@ def flatten_jsonld_objects(payloads: List[Any]) -> List[Dict[str, Any]]:
     for payload in roots:
         for obj in iter_json_objects(payload):
             if isinstance(obj, dict):
-                # explode @graph if present
                 if "@graph" in obj and isinstance(obj["@graph"], list):
                     for g in obj["@graph"]:
                         for o in iter_json_objects(g):
@@ -449,7 +485,6 @@ def commerce_ok(product_obj: Dict[str, Any]) -> bool:
 
 
 def compute_score(org_found: bool, id_verified: bool, faq_found: bool, prod_found: bool, comm_ready: bool, ghost: bool) -> int:
-    # Ghost code forces 0 (render-blocking)
     if ghost:
         return 0
     score = 0
@@ -470,17 +505,16 @@ def compute_score(org_found: bool, id_verified: bool, faq_found: bool, prod_foun
 # Deep tech checks
 # ----------------------------
 def check_robots(origin: str, timeout: int) -> Tuple[bool, Optional[str], Optional[str]]:
-    final, txt, err = safe_fetch_text(urljoin(origin, "/robots.txt"), timeout)
+    _, txt, err = safe_fetch_text(urljoin(origin, "/robots.txt"), timeout)
     if err or txt is None:
         return False, None, err
     return True, txt, None
 
 
 def check_llms_txt(origin: str, timeout: int) -> Tuple[bool, Optional[str]]:
-    final, txt, err = safe_fetch_text(urljoin(origin, "/llms.txt"), timeout)
+    _, txt, err = safe_fetch_text(urljoin(origin, "/llms.txt"), timeout)
     if err or txt is None:
         return False, err
-    # treat as present only if it isn't empty and not an HTML page
     if len(txt.strip()) > 10 and "<html" not in txt.lower():
         return True, None
     return False, "llms.txt exists but appears empty or non-text."
@@ -500,11 +534,9 @@ def extract_h1_text(soup: BeautifulSoup) -> str:
 def schema_types_set(objs: List[Dict[str, Any]]) -> Set[str]:
     out: Set[str] = set()
     for o in objs:
-        t = o.get("@type")
-        types = normalize_schema_type(t)
+        types = normalize_schema_type(o.get("@type"))
         for x in types:
             out.add(x)
-    # present as canonical-cased-ish
     return out
 
 
@@ -520,9 +552,8 @@ def extract_social_sameas(org_obj: Dict[str, Any]) -> List[str]:
         h = urlparse(l).netloc.lower().replace("www.", "")
         if any(dom in h for dom in SOCIAL_DOMAINS):
             socials.append(l)
-    # unique, keep order
-    seen = set()
-    out = []
+    seen: Set[str] = set()
+    out: List[str] = []
     for s in socials:
         if s in seen:
             continue
@@ -542,9 +573,8 @@ def scan_images_missing_alt(soup: BeautifulSoup) -> Tuple[int, int, List[str]]:
             missing += 1
             src = (img.get("src") or "").strip()
             missing_names.append(extract_filename_from_src(src))
-    # top 3 unique
     top: List[str] = []
-    seen = set()
+    seen: Set[str] = set()
     for n in missing_names:
         if n in seen:
             continue
@@ -634,14 +664,12 @@ def run_site_audit(url: str, timeout: int) -> SiteAudit:
     brand = infer_brand_name(origin)
 
     notes: List[str] = []
-
-    # Crawl: discover homepage + products
     home_url, product_urls, crawl_notes = discover_home_and_products(origin, timeout)
     notes.extend(crawl_notes)
 
     scan_urls = [home_url] + [u for u in product_urls if u and not is_disallowed_asset(u)]
     scan_urls = [normalize_url(u) for u in scan_urls]
-    # unique, keep order, limit to 4 pages
+
     uniq: List[str] = []
     seen: Set[str] = set()
     for u in scan_urls:
@@ -653,28 +681,24 @@ def run_site_audit(url: str, timeout: int) -> SiteAudit:
             break
     scan_urls = uniq
 
-    # AI access checks
     robots_ok, robots_text, robots_err = check_robots(origin, timeout)
     llms_ok, llms_err = check_llms_txt(origin, timeout)
 
-    # Page audits
     pages: List[PageAudit] = []
     for u in scan_urls:
         pages.append(audit_page(u, brand, timeout))
 
-    # Visual semantics aggregate
     img_total = 0
     img_missing_alt = 0
     missing_examples: List[str] = []
-    # Trust & Entity aggregate
+
     org_present_any = False
     social_sameas_links: List[str] = []
 
-    # For image scan + sameAs socials, we need soups; reuse fetch lightly
     for p in pages:
         if not p.ok_fetch:
             continue
-        final, html, err = safe_fetch_text(p.final_url, timeout)
+        _, html, err = safe_fetch_text(p.final_url, timeout)
         if err or html is None:
             continue
         soup = BeautifulSoup(html, "lxml")
@@ -716,10 +740,10 @@ def run_site_audit(url: str, timeout: int) -> SiteAudit:
 
 
 # ----------------------------
-# Score + Risk logic
+# Aggregation helpers
 # ----------------------------
-def site_score(site: SiteAudit) -> int:
-    if not site.pages:
+def site_score(site: Optional[SiteAudit]) -> int:
+    if not site or not site.pages:
         return 0
     return int(round(sum(p.score for p in site.pages) / len(site.pages)))
 
@@ -756,23 +780,22 @@ def organization_jsonld_template(domain: str, brand: str) -> str:
 # ----------------------------
 st.title("Agentic Infrastructure Audit")
 st.caption(
-    "A high-end AEO/AI visibility scanner with competitor benchmarking. "
-    "Crawls your homepage + product pages and runs deep technical checks."
+    "High-end AEO/AI visibility scanner with competitor benchmarking. "
+    "Crawls homepage + discovered product pages and surfaces technical blockers."
 )
 
 with st.container(border=True):
-    c1, c2 = st.columns(2)
-    with c1:
+    a, b = st.columns(2)
+    with a:
         target_url = st.text_input("Target URL", placeholder="https://yourbrand.com")
-    with c2:
+    with b:
         competitor_url = st.text_input("Competitor URL (Optional)", placeholder="https://competitor.com")
 
     timeout = st.slider("Timeout (seconds)", min_value=5, max_value=60, value=DEFAULT_TIMEOUT, step=5)
-
     run = st.button("Run Competitive Audit", type="primary", use_container_width=True)
 
 if not run:
-    st.info("Enter a target URL (and optionally a competitor) to run a PageSpeed-style AI visibility audit.")
+    st.info("Enter a target URL (and optionally a competitor) to run the audit.")
     st.stop()
 
 target_origin = origin_from_url(target_url)
@@ -799,27 +822,41 @@ your_score = site_score(target_site)
 comp_score = site_score(comp_site) if comp_site else 0
 
 # ----------------------------
-# Metric Cards (streamlit-extras)
+# Scorecard with Gauges (Plotly)
 # ----------------------------
 st.subheader("Competitive Scorecard")
 
-m1, m2, m3 = st.columns(3)
-with m1:
-    st.metric("Your Agentic Score", f"{your_score}/100")
-with m2:
+g1, g2, g3 = st.columns(3)
+
+with g1:
+    st.plotly_chart(create_gauge(your_score, "Your Agentic Score"), use_container_width=True)
+
+with g2:
     if comp_site:
-        delta = comp_score - your_score
-        arrow = "↑" if delta > 0 else ("↓" if delta < 0 else "→")
-        st.metric("Competitor Score", f"{comp_score}/100", f"{arrow} {delta}")
+        comp_host = urlparse(comp_site.origin).netloc.replace("www.", "")
+        st.plotly_chart(create_gauge(comp_score, f"{comp_host} Score"), use_container_width=True)
     else:
-        st.metric("Competitor Score", "—", "Enter competitor")
-with m3:
+        st.plotly_chart(create_gauge(0, "Competitor Score"), use_container_width=True)
+        st.info("Enter a competitor URL to compare.")
+
+with g3:
     if comp_site:
         rr = revenue_risk_from_gap(your_score, comp_score)
-        st.metric("Revenue Risk", rr)
+        if rr == "High":
+            st.error("Revenue Risk: HIGH\n\nCompetitor has a material advantage in AI visibility signals.")
+        elif rr == "Medium":
+            st.warning("Revenue Risk: MEDIUM\n\nCompetitor is ahead on at least one critical layer.")
+        else:
+            st.success("Revenue Risk: LOW\n\nYour visibility signals are competitive.")
+        delta = comp_score - your_score
+        if delta > 0:
+            st.warning(f"Gap: Competitor +{delta} points")
+        elif delta < 0:
+            st.success(f"Gap: You +{abs(delta)} points")
+        else:
+            st.info("Gap: Tied")
     else:
-        st.metric("Revenue Risk", "—")
-style_metric_cards(border_left_color="#4285F4", border_color="#E6E8EB", box_shadow=True)
+        st.info("Revenue Risk unavailable without competitor.")
 
 if comp_site and comp_score > your_score:
     comp_host = urlparse(comp_site.origin).netloc.replace("www.", "")
@@ -828,91 +865,94 @@ if comp_site and comp_score > your_score:
 st.divider()
 
 # ----------------------------
-# WordLift-style Insight Grid (2x2)
+# Insight Grid (2x2) — ensure every card uses status boxes (no plain text)
 # ----------------------------
 st.subheader("Insight Grid (Deep Tech)")
 
-g1, g2 = st.columns(2)
-g3, g4 = st.columns(2)
+c1, c2 = st.columns(2)
+c3, c4 = st.columns(2)
 
 # Card A: AI Access
-with g1:
+with c1:
     with st.container(border=True):
-        st.markdown("### AI Access")
+        st.info("AI Access (Robots + llms.txt)")
         if target_site.robots_accessible:
-            st.success("robots.txt reachable.")
+            st.success("robots.txt: reachable ✅")
         else:
-            st.error("robots.txt unreachable. Crawlers may downgrade reliability.")
+            st.error("robots.txt: unreachable ❌")
             if target_site.robots_error:
-                st.caption(f"Error: {target_site.robots_error}")
+                st.warning(f"Fetch error: {target_site.robots_error}")
 
         if target_site.llms_txt_present:
-            st.success("llms.txt detected (explicit AI permissioning).")
+            st.success("llms.txt: detected ✅ (explicit AI permissioning)")
         else:
-            st.error("[Impact: HIGH] llms.txt missing — critical for explicit AI permissioning.")
-            st.caption("Why it matters: It clarifies agent access/policy and reduces ambiguity in AI crawling decisions.")
+            st.error("[Impact: HIGH] llms.txt: missing ❌")
+            if target_site.llms_txt_error:
+                st.warning(f"Reason: {target_site.llms_txt_error}")
+            st.warning("Why it matters: Explicit AI policy reduces ambiguity and improves agent trust decisions.")
 
-        st.caption("Pages scanned: " + str(len(target_site.pages)))
-        st.caption("Discovery notes (summary):")
-        if target_site.notes:
-            st.write("• " + " • ".join(target_site.notes[:3]))
+        if target_site.pages:
+            st.success(f"Pages scanned ✅: {len(target_site.pages)}")
+        else:
+            st.error("Pages scanned ❌: 0 (crawler could not discover pages)")
 
 # Card B: Visual Semantics
-with g2:
+with c2:
     with st.container(border=True):
-        st.markdown("### Visual Semantics")
-        st.write(f"Images scanned: **{target_site.img_total}**")
+        st.warning("Visual Semantics (Image Alt Text)")
         if target_site.img_total == 0:
-            st.info("No images detected on scanned pages.")
+            st.info("Images scanned: 0 (no images found on scanned pages).")
         else:
+            st.success(f"Images scanned ✅: {target_site.img_total}")
             if target_site.img_missing_alt > 0:
-                st.warning(f"Missing alt text: **{target_site.img_missing_alt}**")
+                st.error(f"Missing alt text ❌: {target_site.img_missing_alt}")
                 if target_site.img_missing_alt_examples:
-                    st.caption("Proof (filenames): " + ", ".join(target_site.img_missing_alt_examples))
-                st.caption("Why it matters: Missing alt reduces AI-readable meaning of visual content.")
+                    st.warning("Proof (filenames): " + ", ".join(target_site.img_missing_alt_examples))
+                st.warning("Impact: AI loses visual context and product understanding without alt anchors.")
             else:
-                st.success("All scanned images include alt text.")
+                st.success("Alt text coverage ✅: 100% (no missing alt detected)")
 
 # Card C: Semantic Density
-with g3:
+with c3:
     with st.container(border=True):
-        st.markdown("### Semantic Density")
+        st.info("Semantic Density (Text-to-Code Ratio)")
         densities = [p.semantic_density for p in target_site.pages if p.ok_fetch]
         avg_density = (sum(densities) / len(densities)) if densities else 0.0
-        st.write(f"Average semantic density: **{avg_density:.2f}%**")
-
+        st.success(f"Average semantic density ✅: {avg_density:.2f}%")
         if avg_density < 5.0:
-            st.error("Bloated Code (<5%): AI struggles to read noise. Reduce markup/scripts and expose more meaningful text.")
+            st.error("Bloated Code ❌ (<5%): Too much code noise, too little meaning.")
+            st.warning("Why it matters: AI context windows waste tokens on markup instead of your message.")
         elif avg_density < 10.0:
-            st.warning("Low density (<10%): Content-to-code ratio is weak. Consider simplifying templates and improving text signals.")
+            st.warning("Low density ⚠️ (<10%): Content-to-code ratio is weak.")
+            st.warning("Action: Reduce template bloat and expose more meaningful on-page text.")
         else:
-            st.success("Healthy semantic ratio (signal > noise).")
-
-        st.caption("Definition: (Visible Text Length / HTML Length) × 100")
+            st.success("Healthy ratio ✅: Strong signal-to-noise for AI extraction.")
 
 # Card D: Trust & Entity
-with g4:
+with c4:
     with st.container(border=True):
-        st.markdown("### Trust & Entity")
+        st.info("Trust & Entity (Organization + sameAs)")
         org_any = any(p.org_found for p in target_site.pages if p.ok_fetch)
         id_any = any(p.identity_verified for p in target_site.pages if p.ok_fetch)
+
         if org_any:
-            st.success("Organization schema detected.")
+            st.success("Organization schema ✅: detected")
             if id_any:
-                st.success("Identity verified (sameAs or disambiguatingDescription present).")
+                st.success("Identity verification ✅: sameAs/disambiguatingDescription present")
             else:
-                st.warning("Organization present but identity verification is weak (missing sameAs/disambiguatingDescription).")
+                st.error("Identity verification ❌: missing sameAs/disambiguatingDescription")
+                st.warning("Impact: AI agents may confuse your brand with generic terms.")
         else:
-            st.error("Organization schema missing (brand entity is ambiguous).")
+            st.error("Organization schema ❌: missing")
+            st.warning("Impact: Your brand entity is ambiguous to AI systems.")
 
         if target_site.sameas_social_links:
-            st.info("Social profiles detected in sameAs:")
+            st.success("Social sameAs ✅: detected")
             for s in target_site.sameas_social_links[:3]:
-                st.write(f"• {s}")
+                st.info(f"Proof: {s}")
         else:
-            st.warning("No social sameAs links detected (weak entity corroboration).")
-
-        st.caption("Note: Social links help, but Tier-1 sources are stronger for Knowledge Graph trust.")
+            st.warning("Social sameAs ⚠️: none detected")
+            st.warning("Tip: Add verified social profiles in sameAs to corroborate your entity.")
 
 st.divider()
 
@@ -921,60 +961,90 @@ st.divider()
 # ----------------------------
 st.subheader("Detailed Page Analysis")
 
-with st.expander("Open Detailed Page Analysis", expanded=False):
+with st.expander("Detailed Page Analysis", expanded=False):
     for p in target_site.pages:
-        label = f"{p.final_url} — {p.score}/100"
-        with st.expander(label, expanded=False):
+        header = f"{p.final_url} — {p.score}/100"
+        with st.expander(header, expanded=False):
             if not p.ok_fetch:
-                st.error(p.fetch_error or "Fetch failed.")
+                st.error(f"Fetch failed ❌: {p.fetch_error or 'Unknown error'}")
                 continue
 
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.metric("Ghost Code", "YES" if p.ghost else "NO")
-            with c2:
-                st.metric("Visible Text", str(p.text_len))
-            with c3:
-                st.metric("Semantic Density", f"{p.semantic_density:.2f}%")
-            style_metric_cards(border_left_color="#34A853", border_color="#E6E8EB", box_shadow=False)
-
-            st.markdown("**Checklist**")
-            st.write(f"- H1 present: {'✅' if p.h1_text else '❌'}")
-            st.write(f"- H1 contains brand: {'✅' if p.h1_has_brand else '❌'}")
-            st.write(f"- Organization schema: {'✅' if p.org_found else '❌'}")
-            st.write(f"- Identity verified: {'✅' if p.identity_verified else '❌'}")
-            st.write(f"- Product schema: {'✅' if p.product_found else '❌'}")
-            st.write(f"- Offers/price present: {'✅' if p.commerce_ready else '❌'}")
-            st.write(f"- FAQPage schema: {'✅' if p.faq_found else '❌'}")
-
             if p.ghost:
-                st.error("Render Blocking / Ghost Code: Page is 200 OK but exposes <600 readable characters. Fast AI crawlers may see blank HTML.")
+                st.error("Ghost Code ❌: Render Blocking (page exposes <600 readable characters).")
+                st.warning("Impact: Fast AI crawlers may see a blank page even if Google can render it.")
+            else:
+                st.success("Render accessibility ✅: Readable HTML present.")
 
+            if p.h1_text:
+                st.success(f"H1 detected ✅: {p.h1_text[:120]}")
+            else:
+                st.error("H1 missing ❌: Weak page-level entity/topic signal.")
+
+            if p.h1_has_brand:
+                st.success("Brand-in-H1 ✅: Brand name appears in the H1.")
+            else:
+                st.warning("Brand-in-H1 ⚠️: Brand name not found in H1 (entity clarity risk).")
+
+            st.info("Schema types found (sample)")
             if p.schema_types_found:
-                # show a short list of schema types
-                types_preview = sorted(list(p.schema_types_found))[:12]
-                st.caption("Schema types found (sample): " + ", ".join(types_preview))
+                preview = ", ".join(sorted(list(p.schema_types_found))[:12])
+                st.success(f"Schema types ✅: {preview}")
+            else:
+                st.error("Schema types ❌: none detected")
+
+            # Schema checklist (strict)
+            if p.org_found:
+                st.success("Organization schema ✅")
+            else:
+                st.error("Organization schema ❌")
+
+            if p.identity_verified:
+                st.success("Identity verified ✅")
+            else:
+                st.warning("Identity verified ⚠️ (missing sameAs/disambiguatingDescription)")
+
+            if p.product_found:
+                st.success("Product schema ✅")
+            else:
+                st.warning("Product schema ⚠️")
+
+            if p.commerce_ready:
+                st.success("Offers/price ✅ (AI commerce-ready)")
+            else:
+                if p.product_found:
+                    st.error("Offers/price ❌ (Product exists but missing offers/price)")
+                else:
+                    st.warning("Offers/price ⚠️ (no Product schema found)")
+
+            if p.faq_found:
+                st.success("FAQPage ✅ (answer engine active)")
+            else:
+                st.warning("FAQPage ⚠️ (missing structured answers)")
 
 st.divider()
 
 # ----------------------------
-# Phase 2 Upsell
+# Phase 2 Upsell (Strategy)
 # ----------------------------
 st.subheader("Phase 1 vs Phase 2")
 
-left, right = st.columns([0.55, 0.45])
+l, r = st.columns([0.55, 0.45])
 
-with left:
-    st.markdown("### Phase 1 (Defense): Identity Patch")
-    st.caption("If your identity signal is weak, this is the minimum 'Hello' tag to anchor your brand entity.")
+with l:
+    st.info("Phase 1 (Defense): Identity Patch")
+    needs_identity_patch = not any(p.identity_verified for p in target_site.pages if p.ok_fetch)
+    if needs_identity_patch:
+        st.warning("Identity verification is missing. Add this Organization JSON-LD to reduce entity ambiguity.")
+    else:
+        st.success("Identity verification looks present on at least one scanned page. Use this snippet as reinforcement if needed.")
     st.code(organization_jsonld_template(target_site.origin, target_site.brand), language="json")
 
-with right:
-    st.markdown("### Phase 2 (Offense): Competitor Displacement")
+with r:
+    st.info("Phase 2 (Offense): Competitor Displacement")
     if comp_site:
         comp_host = urlparse(comp_site.origin).netloc.replace("www.", "")
-        st.info(f"To beat {comp_host}, you need Programmatic Verification and Sentiment Injection.")
+        st.warning(f"To beat {comp_host}, you need Programmatic Verification and Sentiment Injection.")
     else:
-        st.info("To win, you need Programmatic Verification and Sentiment Injection.")
-    st.caption("This requires a custom AEO engineering strategy (entity reinforcement, content mapping, and trust node acquisition).")
+        st.warning("To win, you need Programmatic Verification and Sentiment Injection.")
+    st.warning("This requires custom AEO engineering: entity reinforcement, evidence nodes, and competitive displacement.")
     st.link_button("👉 Book Your Strategy Call", "https://calendly.com", use_container_width=True)
