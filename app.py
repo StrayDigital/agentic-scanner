@@ -35,21 +35,22 @@ st.set_page_config(
 # ----------------------------
 # Premium CSS injection
 # ----------------------------
+
 PREMIUM_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, [data-testid="stAppViewContainer"] {
-  background: #080c10 !important;
-  color: #c8d0dc !important;
-  font-family: 'DM Sans', sans-serif !important;
+  background: #f0f4f8 !important;
+  color: #1e293b !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
 
 [data-testid="stAppViewContainer"] > .main {
-  background: #080c10 !important;
+  background: #f0f4f8 !important;
   padding: 0 !important;
 }
 
@@ -66,131 +67,135 @@ html, body, [data-testid="stAppViewContainer"] {
 }
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #1e2630; border-radius: 4px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
 /* ── Typography ── */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Syne', sans-serif !important;
-  color: #eef0f3 !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  color: #0f172a !important;
   letter-spacing: -0.02em !important;
 }
 
-.stMarkdown p { color: #8a95a3; line-height: 1.7; }
+.stMarkdown p { color: #475569; line-height: 1.7; }
 
 /* ── Text input ── */
 [data-testid="stTextInput"] label {
-  font-family: 'DM Mono', monospace !important;
+  font-family: 'JetBrains Mono', monospace !important;
   font-size: 11px !important;
-  letter-spacing: 0.12em !important;
+  letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
-  color: #4a9eff !important;
-  font-weight: 400 !important;
+  color: #64748b !important;
+  font-weight: 500 !important;
 }
 
 [data-testid="stTextInput"] input {
-  background: #0d1117 !important;
-  border: 1px solid #1e2a38 !important;
+  background: #ffffff !important;
+  border: 1.5px solid #e2e8f0 !important;
   border-radius: 8px !important;
-  color: #eef0f3 !important;
-  font-family: 'DM Mono', monospace !important;
-  font-size: 13px !important;
-  padding: 12px 16px !important;
-  transition: border-color 0.2s !important;
+  color: #0f172a !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 14px !important;
+  padding: 11px 16px !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
 }
 
 [data-testid="stTextInput"] input:focus {
-  border-color: #4a9eff !important;
-  box-shadow: 0 0 0 3px rgba(74,158,255,0.1) !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12) !important;
   outline: none !important;
 }
 
-[data-testid="stTextInput"] input::placeholder { color: #2e3c4e !important; }
+[data-testid="stTextInput"] input::placeholder { color: #94a3b8 !important; }
 
 /* ── Primary button ── */
 [data-testid="stButton"] > button[kind="primary"] {
-  background: #4a9eff !important;
-  color: #080c10 !important;
+  background: #2563eb !important;
+  color: #ffffff !important;
   border: none !important;
   border-radius: 8px !important;
-  font-family: 'Syne', sans-serif !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
   font-weight: 700 !important;
   font-size: 14px !important;
-  letter-spacing: 0.04em !important;
-  padding: 14px 28px !important;
-  transition: all 0.2s !important;
+  letter-spacing: 0.01em !important;
+  padding: 12px 24px !important;
+  transition: all 0.15s !important;
   width: 100% !important;
+  box-shadow: 0 1px 3px rgba(37,99,235,0.3) !important;
 }
 
 [data-testid="stButton"] > button[kind="primary"]:hover {
-  background: #6fb3ff !important;
+  background: #1d4ed8 !important;
+  box-shadow: 0 4px 12px rgba(37,99,235,0.35) !important;
   transform: translateY(-1px) !important;
-  box-shadow: 0 8px 24px rgba(74,158,255,0.25) !important;
 }
 
 /* ── Secondary button ── */
 [data-testid="stButton"] > button[kind="secondary"] {
-  background: #0d1117 !important;
-  color: #8a95a3 !important;
-  border: 1px solid #1e2a38 !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  border: 1.5px solid #e2e8f0 !important;
   border-radius: 8px !important;
-  font-family: 'DM Mono', monospace !important;
-  font-size: 12px !important;
-  padding: 10px 20px !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 13px !important;
+  padding: 9px 18px !important;
 }
 
 /* ── Expander ── */
 [data-testid="stExpander"] {
-  background: #0d1117 !important;
-  border: 1px solid #1a2332 !important;
-  border-radius: 12px !important;
-  margin-bottom: 12px !important;
+  background: #ffffff !important;
+  border: 1.5px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  margin-bottom: 10px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
 }
 
 [data-testid="stExpander"] summary {
-  font-family: 'DM Mono', monospace !important;
-  font-size: 12px !important;
-  color: #8a95a3 !important;
-  padding: 16px 20px !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  padding: 14px 18px !important;
 }
 
-[data-testid="stExpander"] summary:hover { color: #eef0f3 !important; }
+[data-testid="stExpander"] summary:hover { color: #0f172a !important; }
 
 /* ── Plotly charts ── */
 .js-plotly-plot .plotly { background: transparent !important; }
 
 /* ── Metrics ── */
 [data-testid="stMetric"] {
-  background: #0d1117 !important;
-  border: 1px solid #1a2332 !important;
-  border-radius: 12px !important;
-  padding: 20px !important;
+  background: #ffffff !important;
+  border: 1.5px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  padding: 18px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
 }
 
 [data-testid="stMetricLabel"] {
-  font-family: 'DM Mono', monospace !important;
+  font-family: 'JetBrains Mono', monospace !important;
   font-size: 11px !important;
-  letter-spacing: 0.1em !important;
+  letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
-  color: #4a6080 !important;
+  color: #94a3b8 !important;
 }
 
 [data-testid="stMetricValue"] {
-  font-family: 'Syne', sans-serif !important;
-  font-size: 32px !important;
-  color: #eef0f3 !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 30px !important;
+  color: #0f172a !important;
+  font-weight: 800 !important;
 }
 
-[data-testid="stMetricDelta"] { font-size: 12px !important; }
-
 /* ── Spinner ── */
-[data-testid="stSpinner"] { color: #4a9eff !important; }
+[data-testid="stSpinner"] { color: #2563eb !important; }
 
 /* ── Code blocks ── */
 [data-testid="stCodeBlock"] {
-  background: #0d1117 !important;
-  border: 1px solid #1a2332 !important;
+  background: #f8fafc !important;
+  border: 1.5px solid #e2e8f0 !important;
   border-radius: 8px !important;
 }
 
@@ -200,7 +205,7 @@ h1, h2, h3, h4, h5, h6 {
 /* ── Divider ── */
 hr {
   border: none !important;
-  border-top: 1px solid #111922 !important;
+  border-top: 1.5px solid #e2e8f0 !important;
   margin: 2.5rem 0 !important;
 }
 </style>
@@ -212,120 +217,150 @@ hr {
 def hero_header() -> str:
     return """
 <div style="
-  padding: 3.5rem 0 2rem;
-  border-bottom: 1px solid #111922;
+  background: linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 60%, #2563eb 100%);
+  padding: 3rem 2.5rem 2.5rem;
+  border-radius: 0 0 20px 20px;
   margin-bottom: 2.5rem;
+  position: relative;
+  overflow: hidden;
 ">
-  <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+  <div style="position:absolute; top:-60px; right:-60px; width:300px; height:300px;
+    background:rgba(255,255,255,0.04); border-radius:50%;"></div>
+  <div style="position:absolute; bottom:-80px; right:100px; width:200px; height:200px;
+    background:rgba(255,255,255,0.03); border-radius:50%;"></div>
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px; position:relative;">
     <div style="
-      width:36px; height:36px; background:#4a9eff;
+      width:32px; height:32px; background:rgba(255,255,255,0.15);
       border-radius:8px; display:flex; align-items:center; justify-content:center;
-      font-size:18px; color:#080c10; font-weight:700;
+      font-size:16px; border:1px solid rgba(255,255,255,0.2);
     ">⬡</div>
     <span style="
-      font-family:'DM Mono',monospace; font-size:11px;
-      letter-spacing:0.18em; text-transform:uppercase; color:#4a6080;
+      font-family:'JetBrains Mono',monospace; font-size:11px;
+      letter-spacing:0.14em; text-transform:uppercase; color:rgba(255,255,255,0.6);
     ">Agentic Infrastructure</span>
+    <span style="
+      font-family:'JetBrains Mono',monospace; font-size:10px;
+      background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2);
+      color:rgba(255,255,255,0.8); padding:2px 8px; border-radius:20px;
+      letter-spacing:0.06em;
+    ">LIVE</span>
   </div>
   <h1 style="
-    font-family:'Syne',sans-serif; font-size:clamp(2rem,4vw,3.2rem);
-    font-weight:800; color:#eef0f3; letter-spacing:-0.03em;
-    line-height:1.1; margin-bottom:14px;
-  ">AI Search Readiness<br><span style="color:#4a9eff;">Audit Engine</span></h1>
+    font-family:'Plus Jakarta Sans',sans-serif; font-size:clamp(1.8rem,3.5vw,2.8rem);
+    font-weight:800; color:#ffffff; letter-spacing:-0.03em;
+    line-height:1.15; margin-bottom:12px; position:relative;
+  ">AI Search Readiness<br>Audit Engine</h1>
   <p style="
-    font-family:'DM Sans',sans-serif; font-size:15px;
-    color:#4a6080; max-width:520px; line-height:1.6;
-  ">Audit your site's infrastructure for ChatGPT, Perplexity, Claude & Google AI Overviews. Structured data, entity signals, crawler access — scored in seconds.</p>
+    font-family:'Plus Jakarta Sans',sans-serif; font-size:15px;
+    color:rgba(255,255,255,0.65); max-width:540px; line-height:1.6; position:relative;
+  ">Score your site's readiness for ChatGPT, Perplexity, Claude & Google AI Overviews. Schema, entity signals, crawler access — instant results.</p>
 </div>
 """
 
 def section_header(title: str, subtitle: str = "", mono_tag: str = "") -> str:
-    tag_html = f'<span style="font-family:\'DM Mono\',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:#4a9eff; background:#0d1d2e; border:1px solid #1a3a5c; border-radius:4px; padding:3px 8px; margin-right:12px;">{mono_tag}</span>' if mono_tag else ""
-    sub_html = f'<p style="font-family:\'DM Sans\',sans-serif; font-size:14px; color:#4a6080; margin-top:6px;">{subtitle}</p>' if subtitle else ""
+    tag_html = f'<span style="font-family:\'JetBrains Mono\',monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:#2563eb; background:#eff6ff; border:1px solid #bfdbfe; border-radius:4px; padding:3px 8px; margin-right:10px;">{mono_tag}</span>' if mono_tag else ""
+    sub_html = f'<p style="font-family:\'Plus Jakarta Sans\',sans-serif; font-size:14px; color:#64748b; margin-top:5px;">{subtitle}</p>' if subtitle else ""
     return f"""
-<div style="margin: 3rem 0 1.5rem;">
-  <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+<div style="margin: 2.5rem 0 1.25rem;">
+  <div style="display:flex; align-items:center; gap:6px; margin-bottom:5px;">
     {tag_html}
   </div>
-  <h2 style="font-family:'Syne',sans-serif; font-size:1.5rem; font-weight:700; color:#eef0f3; letter-spacing:-0.02em;">{title}</h2>
+  <h2 style="font-family:'Plus Jakarta Sans',sans-serif; font-size:1.35rem; font-weight:800; color:#0f172a; letter-spacing:-0.02em;">{title}</h2>
   {sub_html}
 </div>
 """
 
 def score_card(score: int, label: str, brand: str) -> str:
-    color = "#22d47a" if score >= 70 else "#f59e0b" if score >= 40 else "#f0504a"
-    circumference = 2 * 3.14159 * 54
+    if score >= 70:
+        color = "#16a34a"
+        bg_ring = "#dcfce7"
+        grade = "Good"
+        grade_bg = "#dcfce7"
+        grade_c = "#16a34a"
+    elif score >= 40:
+        color = "#d97706"
+        bg_ring = "#fef3c7"
+        grade = "Fair"
+        grade_bg = "#fef3c7"
+        grade_c = "#d97706"
+    else:
+        color = "#dc2626"
+        bg_ring = "#fee2e2"
+        grade = "Poor"
+        grade_bg = "#fee2e2"
+        grade_c = "#dc2626"
+    circumference = 2 * 3.14159 * 52
     dash = (score / 100) * circumference
     return f"""
 <div style="
-  background:#0d1117; border:1px solid #1a2332;
-  border-radius:16px; padding:28px 24px; text-align:center;
+  background:#ffffff; border:1.5px solid #e2e8f0;
+  border-radius:14px; padding:24px 20px; text-align:center;
+  box-shadow:0 1px 4px rgba(0,0,0,0.06);
   position:relative; overflow:hidden;
 ">
-  <div style="
-    position:absolute; top:0; left:0; right:0; height:2px;
-    background:linear-gradient(90deg, {color}40, {color}, {color}40);
-  "></div>
-  <p style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:#4a6080; margin-bottom:16px;">{label}</p>
-  <div style="position:relative; width:140px; height:140px; margin:0 auto 16px;">
-    <svg width="140" height="140" viewBox="0 0 140 140">
-      <circle cx="70" cy="70" r="54" fill="none" stroke="#111922" stroke-width="8"/>
-      <circle cx="70" cy="70" r="54" fill="none" stroke="{color}" stroke-width="8"
+  <div style="position:absolute; top:0; left:0; right:0; height:3px; background:{color};
+    opacity:0.7; border-radius:14px 14px 0 0;"></div>
+  <p style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:#94a3b8; margin-bottom:16px;">{label}</p>
+  <div style="position:relative; width:130px; height:130px; margin:0 auto 14px;">
+    <svg width="130" height="130" viewBox="0 0 130 130">
+      <circle cx="65" cy="65" r="52" fill="none" stroke="#f1f5f9" stroke-width="9"/>
+      <circle cx="65" cy="65" r="52" fill="none" stroke="{color}" stroke-width="9"
         stroke-dasharray="{dash:.1f} {circumference:.1f}"
         stroke-dashoffset="{circumference/4:.1f}"
-        stroke-linecap="round"
-        style="transition:stroke-dasharray 1s ease;"/>
+        stroke-linecap="round"/>
     </svg>
     <div style="
       position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
       text-align:center;
     ">
-      <div style="font-family:'Syne',sans-serif; font-size:2.2rem; font-weight:800; color:{color}; line-height:1;">{score}</div>
-      <div style="font-family:'DM Mono',monospace; font-size:9px; color:#4a6080; letter-spacing:0.1em;">/100</div>
+      <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:2rem; font-weight:800; color:{color}; line-height:1;">{score}</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#94a3b8; letter-spacing:0.08em;">/100</div>
     </div>
   </div>
-  <div style="font-family:'Syne',sans-serif; font-size:15px; font-weight:600; color:#eef0f3;">{brand}</div>
+  <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:14px; font-weight:700; color:#0f172a; margin-bottom:8px;">{brand}</div>
+  <span style="display:inline-block; font-family:'Plus Jakarta Sans',sans-serif; font-size:11px; font-weight:600; color:{grade_c}; background:{grade_bg}; padding:2px 10px; border-radius:20px;">{grade}</span>
 </div>
 """
 
 def signal_row(label: str, earned: int, maximum: int) -> str:
     pct = int((earned / maximum) * 100) if maximum > 0 else 0
-    color = "#22d47a" if earned > 0 else "#1a2332"
+    color = "#16a34a" if earned > 0 else "#e2e8f0"
     status = "✓" if earned > 0 else "—"
-    status_color = "#22d47a" if earned > 0 else "#2e3c4e"
+    status_color = "#16a34a" if earned > 0 else "#cbd5e1"
     return f"""
 <div style="
-  display:flex; align-items:center; gap:16px;
-  padding:12px 0; border-bottom:1px solid #0d1420;
+  display:flex; align-items:center; gap:14px;
+  padding:10px 0; border-bottom:1px solid #f1f5f9;
 ">
-  <div style="width:20px; text-align:center; font-size:13px; color:{status_color}; font-weight:600;">{status}</div>
-  <div style="flex:1; font-family:'DM Sans',sans-serif; font-size:13px; color:#8a95a3;">{label}</div>
-  <div style="width:80px; height:3px; background:#0d1420; border-radius:2px; overflow:hidden;">
-    <div style="width:{pct}%; height:100%; background:{color}; border-radius:2px;"></div>
+  <div style="width:18px; text-align:center; font-size:12px; color:{status_color}; font-weight:700;">{status}</div>
+  <div style="flex:1; font-family:'Plus Jakarta Sans',sans-serif; font-size:13px; color:#475569; font-weight:500;">{label}</div>
+  <div style="width:72px; height:4px; background:#f1f5f9; border-radius:4px; overflow:hidden;">
+    <div style="width:{pct}%; height:100%; background:{color}; border-radius:4px;"></div>
   </div>
-  <div style="width:48px; text-align:right; font-family:'DM Mono',monospace; font-size:12px; color:#eef0f3; font-weight:500;">{earned}/{maximum}</div>
+  <div style="width:44px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:12px; color:#334155; font-weight:500;">{earned}/{maximum}</div>
 </div>
 """
 
 def insight_card(icon: str, title: str, value: str, status: str, detail: str = "") -> str:
     colors = {
-        "ok":   ("#22d47a", "#0a1f12", "#1a3d24"),
-        "warn": ("#f59e0b", "#1f1700", "#3d2e00"),
-        "err":  ("#f0504a", "#1f0a09", "#3d1614"),
-        "info": ("#4a9eff", "#0a1520", "#1a3050"),
+        "ok":   ("#16a34a", "#f0fdf4", "#bbf7d0", "#166534"),
+        "warn": ("#d97706", "#fffbeb", "#fde68a", "#92400e"),
+        "err":  ("#dc2626", "#fef2f2", "#fecaca", "#991b1b"),
+        "info": ("#2563eb", "#eff6ff", "#bfdbfe", "#1e40af"),
     }
-    c, bg, border = colors.get(status, colors["info"])
-    detail_html = f'<div style="font-family:\'DM Mono\',monospace; font-size:10px; color:{c}; opacity:0.6; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{detail}</div>' if detail else ""
+    c, bg, border, text_c = colors.get(status, colors["info"])
+    detail_html = f'<div style="font-family:\'JetBrains Mono\',monospace; font-size:10px; color:{c}; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{detail}</div>' if detail else ""
     return f"""
 <div style="
-  background:{bg}; border:1px solid {border};
-  border-radius:12px; padding:20px;
+  background:{bg}; border:1.5px solid {border};
+  border-radius:10px; padding:16px;
+  box-shadow:0 1px 2px rgba(0,0,0,0.03);
 ">
-  <div style="display:flex; align-items:flex-start; gap:12px;">
-    <div style="font-size:18px; margin-top:2px;">{icon}</div>
+  <div style="display:flex; align-items:flex-start; gap:10px;">
+    <div style="font-size:16px; margin-top:1px;">{icon}</div>
     <div style="flex:1; min-width:0;">
-      <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:{c}; opacity:0.7; margin-bottom:4px;">{title}</div>
-      <div style="font-family:'Syne',sans-serif; font-size:15px; font-weight:600; color:#eef0f3;">{value}</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:{c}; margin-bottom:3px; opacity:0.8;">{title}</div>
+      <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:15px; font-weight:700; color:{text_c};">{value}</div>
       {detail_html}
     </div>
   </div>
@@ -334,49 +369,50 @@ def insight_card(icon: str, title: str, value: str, status: str, detail: str = "
 
 def crawler_pill(name: str, status: str) -> str:
     if status == "Accessible":
-        c, bg, border = "#22d47a", "#0a1f12", "#1a3d24"
-        dot = "#22d47a"
+        c, bg, border, dot = "#16a34a", "#f0fdf4", "#bbf7d0", "#16a34a"
     elif status == "Blocked":
-        c, bg, border = "#f0504a", "#1f0a09", "#3d1614"
-        dot = "#f0504a"
+        c, bg, border, dot = "#dc2626", "#fef2f2", "#fecaca", "#dc2626"
     elif status == "Thin Render":
-        c, bg, border = "#f59e0b", "#1f1700", "#3d2e00"
-        dot = "#f59e0b"
+        c, bg, border, dot = "#d97706", "#fffbeb", "#fde68a", "#d97706"
     else:
-        c, bg, border = "#8a95a3", "#0d1117", "#1a2332"
-        dot = "#8a95a3"
+        c, bg, border, dot = "#64748b", "#f8fafc", "#e2e8f0", "#94a3b8"
     return f"""
 <div style="
-  background:{bg}; border:1px solid {border};
-  border-radius:10px; padding:16px 18px;
-  display:flex; flex-direction:column; gap:8px;
+  background:{bg}; border:1.5px solid {border};
+  border-radius:10px; padding:14px 16px;
+  display:flex; flex-direction:column; gap:7px;
+  box-shadow:0 1px 2px rgba(0,0,0,0.03);
 ">
-  <div style="font-family:'DM Mono',monospace; font-size:11px; color:#4a6080; letter-spacing:0.08em;">{name}</div>
+  <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#64748b; letter-spacing:0.07em;">{name}</div>
   <div style="display:flex; align-items:center; gap:6px;">
-    <div style="width:6px; height:6px; border-radius:50%; background:{dot};
-      box-shadow:0 0 6px {dot};"></div>
-    <div style="font-family:'Syne',sans-serif; font-size:13px; font-weight:600; color:{c};">{status}</div>
+    <div style="width:7px; height:7px; border-radius:50%; background:{dot};
+      box-shadow:0 0 5px {dot}80;"></div>
+    <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:12px; font-weight:700; color:{c};">{status}</div>
   </div>
 </div>
 """
 
 def authority_node(name: str, found: bool) -> str:
     if found:
-        return f'<div style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:#0a1f12; border:1px solid #1a3d24; border-radius:8px;"><span style="color:#22d47a; font-size:12px;">✓</span><span style="font-family:\'DM Mono\',monospace; font-size:11px; color:#22d47a;">{name}</span></div>'
+        return f'<div style="display:flex; align-items:center; gap:7px; padding:7px 12px; background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px;"><span style="color:#16a34a; font-size:11px; font-weight:700;">✓</span><span style="font-family:\'JetBrains Mono\',monospace; font-size:11px; color:#166534; font-weight:500;">{name}</span></div>'
     else:
-        return f'<div style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:#0d1117; border:1px solid #1a2332; border-radius:8px;"><span style="color:#2e3c4e; font-size:12px;">—</span><span style="font-family:\'DM Mono\',monospace; font-size:11px; color:#2e3c4e;">{name}</span></div>'
+        return f'<div style="display:flex; align-items:center; gap:7px; padding:7px 12px; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:8px;"><span style="color:#cbd5e1; font-size:11px;">—</span><span style="font-family:\'JetBrains Mono\',monospace; font-size:11px; color:#94a3b8;">{name}</span></div>'
 
 def page_audit_row(label: str, ok: bool, detail: str = "") -> str:
-    icon = "✓" if ok else "✗"
-    ic = "#22d47a" if ok else "#f0504a"
-    det = f'<span style="font-family:\'DM Mono\',monospace; font-size:10px; color:#4a6080; margin-left:8px;">{detail[:60]}</span>' if detail else ""
+    icon = "✓" if ok else "✕"
+    ic = "#16a34a" if ok else "#dc2626"
+    icon_bg = "#f0fdf4" if ok else "#fef2f2"
+    det = f'<span style="font-family:\'JetBrains Mono\',monospace; font-size:10px; color:#94a3b8; margin-left:8px;">{detail[:60]}</span>' if detail else ""
     return f"""
 <div style="
   display:flex; align-items:center; gap:10px;
-  padding:9px 0; border-bottom:1px solid #0d1420;
+  padding:8px 0; border-bottom:1px solid #f8fafc;
 ">
-  <span style="font-family:'DM Mono',monospace; font-size:12px; color:{ic}; width:14px;">{icon}</span>
-  <span style="font-family:'DM Sans',sans-serif; font-size:13px; color:#8a95a3; flex:1;">{label}</span>
+  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:{ic};
+    background:{icon_bg}; width:20px; height:20px; border-radius:4px;
+    display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+    font-weight:700;">{icon}</span>
+  <span style="font-family:'Plus Jakarta Sans',sans-serif; font-size:13px; color:#475569; flex:1; font-weight:500;">{label}</span>
   {det}
 </div>
 """
@@ -384,33 +420,37 @@ def page_audit_row(label: str, ok: bool, detail: str = "") -> str:
 def ai_brief_card(content: str) -> str:
     return f"""
 <div style="
-  background:#060e1a;
-  border:1px solid #1a3050;
-  border-left:3px solid #4a9eff;
-  border-radius:12px;
-  padding:24px 28px;
-  margin-top:16px;
-  font-family:'DM Sans',sans-serif;
+  background:#ffffff;
+  border:1.5px solid #bfdbfe;
+  border-left:4px solid #2563eb;
+  border-radius:10px;
+  padding:22px 26px;
+  margin-top:14px;
+  font-family:'Plus Jakarta Sans',sans-serif;
   font-size:14px;
-  color:#8a95a3;
+  color:#334155;
   line-height:1.8;
   white-space:pre-wrap;
+  box-shadow:0 1px 4px rgba(37,99,235,0.08);
 ">{content}</div>
 """
 
 def cta_block() -> str:
     return """
 <div style="
-  background:linear-gradient(135deg, #0d1d2e 0%, #0a1520 100%);
-  border:1px solid #1a3050;
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
   border-radius:16px;
   padding:40px;
   text-align:center;
   margin-top:2rem;
+  position:relative;
+  overflow:hidden;
 ">
-  <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:#4a9eff; margin-bottom:12px;">Ready to fix it?</div>
-  <h3 style="font-family:'Syne',sans-serif; font-size:1.8rem; font-weight:800; color:#eef0f3; letter-spacing:-0.02em; margin-bottom:10px;">Get expert implementation</h3>
-  <p style="font-family:'DM Sans',sans-serif; font-size:14px; color:#4a6080; max-width:420px; margin:0 auto 24px; line-height:1.6;">We'll implement every signal, fix your schema, and deploy llms.txt — guaranteed to raise your score.</p>
+  <div style="position:absolute; top:-40px; right:-40px; width:200px; height:200px;
+    background:rgba(255,255,255,0.04); border-radius:50%;"></div>
+  <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:rgba(255,255,255,0.6); margin-bottom:10px; position:relative;">Ready to fix it?</div>
+  <h3 style="font-family:'Plus Jakarta Sans',sans-serif; font-size:1.75rem; font-weight:800; color:#ffffff; letter-spacing:-0.02em; margin-bottom:10px; position:relative;">Get expert implementation</h3>
+  <p style="font-family:'Plus Jakarta Sans',sans-serif; font-size:14px; color:rgba(255,255,255,0.65); max-width:420px; margin:0 auto 24px; line-height:1.6; position:relative;">We'll implement every signal, fix your schema, and deploy llms.txt — guaranteed to raise your score.</p>
 </div>
 """
 
