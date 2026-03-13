@@ -236,11 +236,30 @@ def brand_in_h1(brand: str, h1_text: str) -> bool:
 # Networking
 # ----------------------------
 def fetch_text(url: str, timeout: int) -> Tuple[str, str]:
-headers = {
-    "User-Agent": USER_AGENT,
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml",
-}
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml",
+    }
+
+    try:
+        r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+
+        if r.status_code != 200:
+            return url, ""
+
+        return r.url, r.text
+
+    except requests.exceptions.RequestException:
+        return url, ""
+
+
+def safe_fetch_text(url: str, timeout: int) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    try:
+        final_url, text = fetch_text(url, timeout)
+        return final_url, text, None
+    except Exception as e:
+        return None, None, str(e)
     try:
         r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
 
