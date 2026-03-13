@@ -1,6 +1,6 @@
-# app.py — Agentic Infrastructure Audit
+# app.py — Agentic Infrastructure Audit (Premium Edition)
 # Requirements:
-#   pip install streamlit requests beautifulsoup4 lxml streamlit-extras plotly
+#   pip install streamlit requests beautifulsoup4 lxml plotly anthropic
 # Run:
 #   streamlit run app.py
 
@@ -15,16 +15,404 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 from bs4 import BeautifulSoup
-from streamlit_extras.metric_cards import style_metric_cards
+
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
 
 # ----------------------------
-# Page config
+# Page config — must be first
 # ----------------------------
 st.set_page_config(
-    page_title="Agentic Infrastructure Audit",
-    page_icon="📈",
-    layout="centered",
+    page_title="AEO Audit — Agentic Infrastructure",
+    page_icon="⬡",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
+
+# ----------------------------
+# Premium CSS injection
+# ----------------------------
+PREMIUM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, [data-testid="stAppViewContainer"] {
+  background: #080c10 !important;
+  color: #c8d0dc !important;
+  font-family: 'DM Sans', sans-serif !important;
+}
+
+[data-testid="stAppViewContainer"] > .main {
+  background: #080c10 !important;
+  padding: 0 !important;
+}
+
+.main .block-container {
+  max-width: 1280px !important;
+  padding: 0 2rem 4rem !important;
+  margin: 0 auto !important;
+}
+
+/* Hide Streamlit chrome */
+#MainMenu, footer, header, [data-testid="stToolbar"],
+[data-testid="stDecoration"], [data-testid="stStatusWidget"] {
+  display: none !important;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e2630; border-radius: 4px; }
+
+/* ── Typography ── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Syne', sans-serif !important;
+  color: #eef0f3 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.stMarkdown p { color: #8a95a3; line-height: 1.7; }
+
+/* ── Text input ── */
+[data-testid="stTextInput"] label {
+  font-family: 'DM Mono', monospace !important;
+  font-size: 11px !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  color: #4a9eff !important;
+  font-weight: 400 !important;
+}
+
+[data-testid="stTextInput"] input {
+  background: #0d1117 !important;
+  border: 1px solid #1e2a38 !important;
+  border-radius: 8px !important;
+  color: #eef0f3 !important;
+  font-family: 'DM Mono', monospace !important;
+  font-size: 13px !important;
+  padding: 12px 16px !important;
+  transition: border-color 0.2s !important;
+}
+
+[data-testid="stTextInput"] input:focus {
+  border-color: #4a9eff !important;
+  box-shadow: 0 0 0 3px rgba(74,158,255,0.1) !important;
+  outline: none !important;
+}
+
+[data-testid="stTextInput"] input::placeholder { color: #2e3c4e !important; }
+
+/* ── Primary button ── */
+[data-testid="stButton"] > button[kind="primary"] {
+  background: #4a9eff !important;
+  color: #080c10 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  letter-spacing: 0.04em !important;
+  padding: 14px 28px !important;
+  transition: all 0.2s !important;
+  width: 100% !important;
+}
+
+[data-testid="stButton"] > button[kind="primary"]:hover {
+  background: #6fb3ff !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 8px 24px rgba(74,158,255,0.25) !important;
+}
+
+/* ── Secondary button ── */
+[data-testid="stButton"] > button[kind="secondary"] {
+  background: #0d1117 !important;
+  color: #8a95a3 !important;
+  border: 1px solid #1e2a38 !important;
+  border-radius: 8px !important;
+  font-family: 'DM Mono', monospace !important;
+  font-size: 12px !important;
+  padding: 10px 20px !important;
+}
+
+/* ── Expander ── */
+[data-testid="stExpander"] {
+  background: #0d1117 !important;
+  border: 1px solid #1a2332 !important;
+  border-radius: 12px !important;
+  margin-bottom: 12px !important;
+}
+
+[data-testid="stExpander"] summary {
+  font-family: 'DM Mono', monospace !important;
+  font-size: 12px !important;
+  color: #8a95a3 !important;
+  padding: 16px 20px !important;
+}
+
+[data-testid="stExpander"] summary:hover { color: #eef0f3 !important; }
+
+/* ── Plotly charts ── */
+.js-plotly-plot .plotly { background: transparent !important; }
+
+/* ── Metrics ── */
+[data-testid="stMetric"] {
+  background: #0d1117 !important;
+  border: 1px solid #1a2332 !important;
+  border-radius: 12px !important;
+  padding: 20px !important;
+}
+
+[data-testid="stMetricLabel"] {
+  font-family: 'DM Mono', monospace !important;
+  font-size: 11px !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  color: #4a6080 !important;
+}
+
+[data-testid="stMetricValue"] {
+  font-family: 'Syne', sans-serif !important;
+  font-size: 32px !important;
+  color: #eef0f3 !important;
+}
+
+[data-testid="stMetricDelta"] { font-size: 12px !important; }
+
+/* ── Spinner ── */
+[data-testid="stSpinner"] { color: #4a9eff !important; }
+
+/* ── Code blocks ── */
+[data-testid="stCodeBlock"] {
+  background: #0d1117 !important;
+  border: 1px solid #1a2332 !important;
+  border-radius: 8px !important;
+}
+
+/* ── Columns gap ── */
+[data-testid="column"] { padding: 0 8px !important; }
+
+/* ── Divider ── */
+hr {
+  border: none !important;
+  border-top: 1px solid #111922 !important;
+  margin: 2.5rem 0 !important;
+}
+</style>
+"""
+
+# ----------------------------
+# Custom HTML components
+# ----------------------------
+def hero_header() -> str:
+    return """
+<div style="
+  padding: 3.5rem 0 2rem;
+  border-bottom: 1px solid #111922;
+  margin-bottom: 2.5rem;
+">
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+    <div style="
+      width:36px; height:36px; background:#4a9eff;
+      border-radius:8px; display:flex; align-items:center; justify-content:center;
+      font-size:18px; color:#080c10; font-weight:700;
+    ">⬡</div>
+    <span style="
+      font-family:'DM Mono',monospace; font-size:11px;
+      letter-spacing:0.18em; text-transform:uppercase; color:#4a6080;
+    ">Agentic Infrastructure</span>
+  </div>
+  <h1 style="
+    font-family:'Syne',sans-serif; font-size:clamp(2rem,4vw,3.2rem);
+    font-weight:800; color:#eef0f3; letter-spacing:-0.03em;
+    line-height:1.1; margin-bottom:14px;
+  ">AI Search Readiness<br><span style="color:#4a9eff;">Audit Engine</span></h1>
+  <p style="
+    font-family:'DM Sans',sans-serif; font-size:15px;
+    color:#4a6080; max-width:520px; line-height:1.6;
+  ">Audit your site's infrastructure for ChatGPT, Perplexity, Claude & Google AI Overviews. Structured data, entity signals, crawler access — scored in seconds.</p>
+</div>
+"""
+
+def section_header(title: str, subtitle: str = "", mono_tag: str = "") -> str:
+    tag_html = f'<span style="font-family:\'DM Mono\',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:#4a9eff; background:#0d1d2e; border:1px solid #1a3a5c; border-radius:4px; padding:3px 8px; margin-right:12px;">{mono_tag}</span>' if mono_tag else ""
+    sub_html = f'<p style="font-family:\'DM Sans\',sans-serif; font-size:14px; color:#4a6080; margin-top:6px;">{subtitle}</p>' if subtitle else ""
+    return f"""
+<div style="margin: 3rem 0 1.5rem;">
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+    {tag_html}
+  </div>
+  <h2 style="font-family:'Syne',sans-serif; font-size:1.5rem; font-weight:700; color:#eef0f3; letter-spacing:-0.02em;">{title}</h2>
+  {sub_html}
+</div>
+"""
+
+def score_card(score: int, label: str, brand: str) -> str:
+    color = "#22d47a" if score >= 70 else "#f59e0b" if score >= 40 else "#f0504a"
+    circumference = 2 * 3.14159 * 54
+    dash = (score / 100) * circumference
+    return f"""
+<div style="
+  background:#0d1117; border:1px solid #1a2332;
+  border-radius:16px; padding:28px 24px; text-align:center;
+  position:relative; overflow:hidden;
+">
+  <div style="
+    position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, {color}40, {color}, {color}40);
+  "></div>
+  <p style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:#4a6080; margin-bottom:16px;">{label}</p>
+  <div style="position:relative; width:140px; height:140px; margin:0 auto 16px;">
+    <svg width="140" height="140" viewBox="0 0 140 140">
+      <circle cx="70" cy="70" r="54" fill="none" stroke="#111922" stroke-width="8"/>
+      <circle cx="70" cy="70" r="54" fill="none" stroke="{color}" stroke-width="8"
+        stroke-dasharray="{dash:.1f} {circumference:.1f}"
+        stroke-dashoffset="{circumference/4:.1f}"
+        stroke-linecap="round"
+        style="transition:stroke-dasharray 1s ease;"/>
+    </svg>
+    <div style="
+      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+      text-align:center;
+    ">
+      <div style="font-family:'Syne',sans-serif; font-size:2.2rem; font-weight:800; color:{color}; line-height:1;">{score}</div>
+      <div style="font-family:'DM Mono',monospace; font-size:9px; color:#4a6080; letter-spacing:0.1em;">/100</div>
+    </div>
+  </div>
+  <div style="font-family:'Syne',sans-serif; font-size:15px; font-weight:600; color:#eef0f3;">{brand}</div>
+</div>
+"""
+
+def signal_row(label: str, earned: int, maximum: int) -> str:
+    pct = int((earned / maximum) * 100) if maximum > 0 else 0
+    color = "#22d47a" if earned > 0 else "#1a2332"
+    status = "✓" if earned > 0 else "—"
+    status_color = "#22d47a" if earned > 0 else "#2e3c4e"
+    return f"""
+<div style="
+  display:flex; align-items:center; gap:16px;
+  padding:12px 0; border-bottom:1px solid #0d1420;
+">
+  <div style="width:20px; text-align:center; font-size:13px; color:{status_color}; font-weight:600;">{status}</div>
+  <div style="flex:1; font-family:'DM Sans',sans-serif; font-size:13px; color:#8a95a3;">{label}</div>
+  <div style="width:80px; height:3px; background:#0d1420; border-radius:2px; overflow:hidden;">
+    <div style="width:{pct}%; height:100%; background:{color}; border-radius:2px;"></div>
+  </div>
+  <div style="width:48px; text-align:right; font-family:'DM Mono',monospace; font-size:12px; color:#eef0f3; font-weight:500;">{earned}/{maximum}</div>
+</div>
+"""
+
+def insight_card(icon: str, title: str, value: str, status: str, detail: str = "") -> str:
+    colors = {
+        "ok":   ("#22d47a", "#0a1f12", "#1a3d24"),
+        "warn": ("#f59e0b", "#1f1700", "#3d2e00"),
+        "err":  ("#f0504a", "#1f0a09", "#3d1614"),
+        "info": ("#4a9eff", "#0a1520", "#1a3050"),
+    }
+    c, bg, border = colors.get(status, colors["info"])
+    detail_html = f'<div style="font-family:\'DM Mono\',monospace; font-size:10px; color:{c}; opacity:0.6; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{detail}</div>' if detail else ""
+    return f"""
+<div style="
+  background:{bg}; border:1px solid {border};
+  border-radius:12px; padding:20px;
+">
+  <div style="display:flex; align-items:flex-start; gap:12px;">
+    <div style="font-size:18px; margin-top:2px;">{icon}</div>
+    <div style="flex:1; min-width:0;">
+      <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:{c}; opacity:0.7; margin-bottom:4px;">{title}</div>
+      <div style="font-family:'Syne',sans-serif; font-size:15px; font-weight:600; color:#eef0f3;">{value}</div>
+      {detail_html}
+    </div>
+  </div>
+</div>
+"""
+
+def crawler_pill(name: str, status: str) -> str:
+    if status == "Accessible":
+        c, bg, border = "#22d47a", "#0a1f12", "#1a3d24"
+        dot = "#22d47a"
+    elif status == "Blocked":
+        c, bg, border = "#f0504a", "#1f0a09", "#3d1614"
+        dot = "#f0504a"
+    elif status == "Thin Render":
+        c, bg, border = "#f59e0b", "#1f1700", "#3d2e00"
+        dot = "#f59e0b"
+    else:
+        c, bg, border = "#8a95a3", "#0d1117", "#1a2332"
+        dot = "#8a95a3"
+    return f"""
+<div style="
+  background:{bg}; border:1px solid {border};
+  border-radius:10px; padding:16px 18px;
+  display:flex; flex-direction:column; gap:8px;
+">
+  <div style="font-family:'DM Mono',monospace; font-size:11px; color:#4a6080; letter-spacing:0.08em;">{name}</div>
+  <div style="display:flex; align-items:center; gap:6px;">
+    <div style="width:6px; height:6px; border-radius:50%; background:{dot};
+      box-shadow:0 0 6px {dot};"></div>
+    <div style="font-family:'Syne',sans-serif; font-size:13px; font-weight:600; color:{c};">{status}</div>
+  </div>
+</div>
+"""
+
+def authority_node(name: str, found: bool) -> str:
+    if found:
+        return f'<div style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:#0a1f12; border:1px solid #1a3d24; border-radius:8px;"><span style="color:#22d47a; font-size:12px;">✓</span><span style="font-family:\'DM Mono\',monospace; font-size:11px; color:#22d47a;">{name}</span></div>'
+    else:
+        return f'<div style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:#0d1117; border:1px solid #1a2332; border-radius:8px;"><span style="color:#2e3c4e; font-size:12px;">—</span><span style="font-family:\'DM Mono\',monospace; font-size:11px; color:#2e3c4e;">{name}</span></div>'
+
+def page_audit_row(label: str, ok: bool, detail: str = "") -> str:
+    icon = "✓" if ok else "✗"
+    ic = "#22d47a" if ok else "#f0504a"
+    det = f'<span style="font-family:\'DM Mono\',monospace; font-size:10px; color:#4a6080; margin-left:8px;">{detail[:60]}</span>' if detail else ""
+    return f"""
+<div style="
+  display:flex; align-items:center; gap:10px;
+  padding:9px 0; border-bottom:1px solid #0d1420;
+">
+  <span style="font-family:'DM Mono',monospace; font-size:12px; color:{ic}; width:14px;">{icon}</span>
+  <span style="font-family:'DM Sans',sans-serif; font-size:13px; color:#8a95a3; flex:1;">{label}</span>
+  {det}
+</div>
+"""
+
+def ai_brief_card(content: str) -> str:
+    return f"""
+<div style="
+  background:#060e1a;
+  border:1px solid #1a3050;
+  border-left:3px solid #4a9eff;
+  border-radius:12px;
+  padding:24px 28px;
+  margin-top:16px;
+  font-family:'DM Sans',sans-serif;
+  font-size:14px;
+  color:#8a95a3;
+  line-height:1.8;
+  white-space:pre-wrap;
+">{content}</div>
+"""
+
+def cta_block() -> str:
+    return """
+<div style="
+  background:linear-gradient(135deg, #0d1d2e 0%, #0a1520 100%);
+  border:1px solid #1a3050;
+  border-radius:16px;
+  padding:40px;
+  text-align:center;
+  margin-top:2rem;
+">
+  <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:#4a9eff; margin-bottom:12px;">Ready to fix it?</div>
+  <h3 style="font-family:'Syne',sans-serif; font-size:1.8rem; font-weight:800; color:#eef0f3; letter-spacing:-0.02em; margin-bottom:10px;">Get expert implementation</h3>
+  <p style="font-family:'DM Sans',sans-serif; font-size:14px; color:#4a6080; max-width:420px; margin:0 auto 24px; line-height:1.6;">We'll implement every signal, fix your schema, and deploy llms.txt — guaranteed to raise your score.</p>
+</div>
+"""
 
 # ----------------------------
 # Config
@@ -35,10 +423,8 @@ USER_AGENT = (
     "Chrome/122.0.0.0 Safari/537.36"
 )
 DEFAULT_TIMEOUT = 15
-
 SHOPIFY_SITEMAP_PRODUCTS_PATH = "/sitemap_products_1.xml"
 UNIVERSAL_SITEMAP_PATH = "/sitemap.xml"
-
 PRODUCT_HINT_TOKENS = ("/products/", "/product/", "/shop/", "/store/", "/item/")
 DISALLOWED_EXTS = (
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
@@ -46,36 +432,27 @@ DISALLOWED_EXTS = (
     ".mp4", ".mov", ".avi", ".webm",
     ".css", ".js", ".json", ".xml",
 )
-
 SOCIAL_DOMAINS = (
-    "instagram.com",
-    "facebook.com",
-    "tiktok.com",
-    "x.com",
-    "twitter.com",
-    "youtube.com",
-    "linkedin.com",
+    "instagram.com", "facebook.com", "tiktok.com",
+    "x.com", "twitter.com", "youtube.com", "linkedin.com",
 )
-
 AI_CRAWLERS = {
-    "GPTBot": "Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)",
-    "Claude-Web": "Claude-Web/1.0",
-    "CCBot": "CCBot/2.0",
-    "Google-Extended": "Google-Extended",
-    "PerplexityBot": "PerplexityBot/1.0",
+    "GPTBot":         "Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)",
+    "Claude-Web":     "Claude-Web/1.0",
+    "CCBot":          "CCBot/2.0",
+    "Google-Extended":"Google-Extended",
+    "PerplexityBot":  "PerplexityBot/1.0",
 }
-
 AUTHORITY_DOMAINS = {
     "Wikipedia": "wikipedia.org",
-    "Wikidata": "wikidata.org",
-    "Crunchbase": "crunchbase.com",
-    "LinkedIn": "linkedin.com",
-    "YouTube": "youtube.com",
-    "X": "x.com",
-    "Twitter": "twitter.com",
-    "GitHub": "github.com",
+    "Wikidata":  "wikidata.org",
+    "Crunchbase":"crunchbase.com",
+    "LinkedIn":  "linkedin.com",
+    "YouTube":   "youtube.com",
+    "X":         "x.com",
+    "Twitter":   "twitter.com",
+    "GitHub":    "github.com",
 }
-
 GHOST_TEXT_MIN = 600
 INDUSTRY_AVERAGE_SCORE = 72
 
@@ -89,25 +466,19 @@ class PageAudit:
     final_url: str
     ok_fetch: bool
     fetch_error: Optional[str]
-
     score: int
-
     org_found: bool
     identity_verified: bool
     faq_found: bool
     product_found: bool
     commerce_ready: bool
-
     ghost: bool
     text_len: int
     html_len: int
     semantic_density: float
-
     h1_text: str
     h1_has_brand: bool
-
     schema_types_found: Set[str]
-
     extractability_score: int
     extractability_verdict: str
     extractability_reasons: List[str]
@@ -121,64 +492,20 @@ class SiteAudit:
     scan_urls: List[str]
     notes: List[str]
     pages: List[PageAudit]
-
     robots_accessible: bool
     robots_error: Optional[str]
     llms_txt_present: bool
     llms_txt_error: Optional[str]
-
     img_total: int
     img_missing_alt: int
     img_missing_alt_examples: List[str]
-
     org_present_any: bool
     sameas_social_links: List[str]
-
     ai_crawler_results: Dict[str, Dict[str, str]]
-
     authority_score: int
     authority_verdict: str
     authority_results: Dict[str, bool]
     authority_links: List[str]
-
-
-# ----------------------------
-# Gauge helper
-# ----------------------------
-def create_gauge(score: int, title: str) -> go.Figure:
-    score = int(max(0, min(100, score)))
-    fig = go.Figure(
-        go.Indicator(
-            mode="gauge+number",
-            value=score,
-            title={"text": title, "font": {"size": 14}},
-            number={"font": {"size": 34}},
-            gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "rgba(0,0,0,0.25)"},
-                "bar": {"color": "rgba(0,0,0,0.55)"},
-                "bgcolor": "rgba(0,0,0,0)",
-                "borderwidth": 0,
-                "steps": [
-                    {"range": [0, 40], "color": "rgba(231,76,60,0.75)"},
-                    {"range": [40, 70], "color": "rgba(241,196,15,0.75)"},
-                    {"range": [70, 100], "color": "rgba(46,204,113,0.75)"},
-                ],
-                "threshold": {
-                    "line": {"color": "rgba(0,0,0,0.65)", "width": 3},
-                    "thickness": 0.75,
-                    "value": score,
-                },
-            },
-        )
-    )
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=10, r=10, t=40, b=10),
-        height=240,
-        font=dict(size=12),
-    )
-    return fig
 
 
 # ----------------------------
@@ -279,7 +606,9 @@ def fetch_text(url: str, timeout: int) -> Tuple[str, str]:
         return url, ""
 
 
-def safe_fetch_text(url: str, timeout: int) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+def safe_fetch_text(
+    url: str, timeout: int
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     try:
         final_url, text = fetch_text(url, timeout)
         return final_url, text, None
@@ -288,7 +617,6 @@ def safe_fetch_text(url: str, timeout: int) -> Tuple[Optional[str], Optional[str
 
 
 def fetch_with_ua(url: str, user_agent: str, timeout: int) -> Dict[str, str]:
-    """Fetch a URL with a specific User-Agent and return status info."""
     headers = {
         "User-Agent": user_agent,
         "Accept-Language": "en-US,en;q=0.9",
@@ -327,7 +655,7 @@ def crawl_sitemap_for_products(
 
     _, xml, err = safe_fetch_text(sitemap_url, timeout)
     if err or not xml:
-        notes.append(f"⚠️ Sitemap fetch failed: {sitemap_url} ({err})")
+        notes.append(f"Sitemap fetch failed: {sitemap_url}")
         return [], notes
 
     locs = extract_loc_urls_from_xml(xml)
@@ -341,13 +669,15 @@ def crawl_sitemap_for_products(
             found.append(u)
 
     if found:
-        notes.append(f"✅ Sitemap discovered {len(found)} product URL(s)")
+        notes.append(f"Sitemap discovered {len(found)} product URL(s)")
     else:
-        notes.append("⚠️ Sitemap returned 0 product URLs")
+        notes.append("Sitemap returned 0 product URLs")
     return found, notes
 
 
-def discover_from_homepage_scrape(origin: str, home_html: str, limit: int = 3) -> List[str]:
+def discover_from_homepage_scrape(
+    origin: str, home_html: str, limit: int = 3
+) -> List[str]:
     soup = BeautifulSoup(home_html, "lxml")
     candidates: List[str] = []
     for a in soup.find_all("a", href=True):
@@ -378,14 +708,16 @@ def discover_home_and_products(
     homepage_url = normalize_url(home_final)
 
     turbo_url = urljoin(origin, SHOPIFY_SITEMAP_PRODUCTS_PATH)
-    turbo_found, turbo_notes = crawl_sitemap_for_products(turbo_url, origin, timeout, limit=3)
-    notes.extend([f"Shopify Turbo: {n}" for n in turbo_notes])
+    turbo_found, turbo_notes = crawl_sitemap_for_products(
+        turbo_url, origin, timeout, limit=3
+    )
+    notes.extend(turbo_notes)
     if turbo_found:
         return homepage_url, turbo_found, notes
 
     sm_url = urljoin(origin, UNIVERSAL_SITEMAP_PATH)
     sm_found, sm_notes = crawl_sitemap_for_products(sm_url, origin, timeout, limit=3)
-    notes.extend([f"Universal Sitemap: {n}" for n in sm_notes])
+    notes.extend(sm_notes)
     if sm_found:
         return homepage_url, sm_found, notes
 
@@ -398,23 +730,15 @@ def discover_home_and_products(
                 if sm:
                     sitemap_lines.append(sm)
         if sitemap_lines:
-            notes.append(f"Robots: Found {len(sitemap_lines)} sitemap declaration(s)")
             for sm in sitemap_lines:
                 found, smn = crawl_sitemap_for_products(sm, origin, timeout, limit=3)
-                notes.extend([f"Robots Sitemap: {n}" for n in smn])
+                notes.extend(smn)
                 if found:
                     return homepage_url, found, notes
-        else:
-            notes.append("Robots: No sitemap declarations found")
-    else:
-        notes.append(f"Robots: not accessible ({robots_err})")
 
     scrape_found = discover_from_homepage_scrape(origin, home_html, limit=3)
     if scrape_found:
-        notes.append(f"Homepage Scrape: Found {len(scrape_found)} product-like URL(s)")
-    else:
-        notes.append("Homepage Scrape: No product-like URLs found")
-
+        notes.append(f"Homepage scrape: {len(scrape_found)} product-like URL(s)")
     return homepage_url, scrape_found, notes
 
 
@@ -429,9 +753,9 @@ def try_parse_json(raw: str) -> Optional[Any]:
     no_comments = re.sub(
         r"//.*?$|/\*.*?\*/", "", raw, flags=re.MULTILINE | re.DOTALL
     ).strip()
-    no_trailing_commas = re.sub(r",\s*([}\]])", r"\1", no_comments)
+    no_trailing = re.sub(r",\s*([}\]])", r"\1", no_comments)
     try:
-        return json.loads(no_trailing_commas)
+        return json.loads(no_trailing)
     except Exception:
         return None
 
@@ -496,7 +820,9 @@ def has_type(obj: Dict[str, Any], target: str) -> bool:
     return target.lower() in normalize_schema_type(obj.get("@type"))
 
 
-def find_first(objs: List[Dict[str, Any]], target: str) -> Optional[Dict[str, Any]]:
+def find_first(
+    objs: List[Dict[str, Any]], target: str
+) -> Optional[Dict[str, Any]]:
     for o in objs:
         if has_type(o, target):
             return o
@@ -508,7 +834,7 @@ def find_all(objs: List[Dict[str, Any]], target: str) -> List[Dict[str, Any]]:
 
 
 # ----------------------------
-# Scoring rules
+# Scoring
 # ----------------------------
 def identity_ok(org_obj: Dict[str, Any]) -> bool:
     dis = org_obj.get("disambiguatingDescription")
@@ -517,34 +843,28 @@ def identity_ok(org_obj: Dict[str, Any]) -> bool:
     same = org_obj.get("sameAs")
     if isinstance(same, str) and same.strip():
         return True
-    if isinstance(same, list) and any(
-        isinstance(x, str) and x.strip() for x in same
-    ):
+    if isinstance(same, list) and any(isinstance(x, str) and x.strip() for x in same):
         return True
     return False
 
 
 def offers_has_price(offers: Any) -> bool:
-    def offer_dict_has_price(d: Dict[str, Any]) -> bool:
+    def _check(d: Dict[str, Any]) -> bool:
         if "price" in d and str(d.get("price", "")).strip():
             return True
         ps = d.get("priceSpecification")
-        if isinstance(ps, dict) and "price" in ps and str(ps.get("price", "")).strip():
+        if isinstance(ps, dict) and "price" in ps:
             return True
         if isinstance(ps, list):
-            for item in ps:
-                if (
-                    isinstance(item, dict)
-                    and "price" in item
-                    and str(item.get("price", "")).strip()
-                ):
-                    return True
+            return any(
+                isinstance(i, dict) and "price" in i for i in ps
+            )
         return False
 
     if isinstance(offers, dict):
-        return offer_dict_has_price(offers)
+        return _check(offers)
     if isinstance(offers, list):
-        return any(isinstance(o, dict) and offer_dict_has_price(o) for o in offers)
+        return any(isinstance(o, dict) and _check(o) for o in offers)
     return False
 
 
@@ -556,12 +876,8 @@ def commerce_ok(product_obj: Dict[str, Any]) -> bool:
 
 
 def compute_score(
-    org_found: bool,
-    id_verified: bool,
-    faq_found: bool,
-    prod_found: bool,
-    comm_ready: bool,
-    ghost: bool,
+    org_found: bool, id_verified: bool, faq_found: bool,
+    prod_found: bool, comm_ready: bool, ghost: bool
 ) -> int:
     if ghost:
         return 0
@@ -580,7 +896,7 @@ def compute_score(
 
 
 # ----------------------------
-# Deep tech checks
+# Technical checks
 # ----------------------------
 def check_robots(
     origin: str, timeout: int
@@ -597,7 +913,7 @@ def check_llms_txt(origin: str, timeout: int) -> Tuple[bool, Optional[str]]:
         return False, err or "No response."
     if len(txt.strip()) > 10 and "<html" not in txt.lower():
         return True, None
-    return False, "llms.txt exists but appears empty or non-text."
+    return False, "Exists but appears empty or non-text."
 
 
 def calc_semantic_density(text_len: int, html_len: int) -> float:
@@ -614,8 +930,7 @@ def extract_h1_text(soup: BeautifulSoup) -> str:
 def schema_types_set(objs: List[Dict[str, Any]]) -> Set[str]:
     out: Set[str] = set()
     for o in objs:
-        types = normalize_schema_type(o.get("@type"))
-        for x in types:
+        for x in normalize_schema_type(o.get("@type")):
             out.add(x)
     return out
 
@@ -623,7 +938,6 @@ def schema_types_set(objs: List[Dict[str, Any]]) -> Set[str]:
 def extract_social_sameas(org_obj: Dict[str, Any]) -> List[str]:
     same_as = org_obj.get("sameAs")
     links: List[str] = []
-
     if isinstance(same_as, str) and same_as.strip():
         links = [same_as.strip()]
     elif isinstance(same_as, list):
@@ -638,92 +952,74 @@ def extract_social_sameas(org_obj: Dict[str, Any]) -> List[str]:
     seen: Set[str] = set()
     out: List[str] = []
     for s in socials:
-        if s in seen:
-            continue
-        seen.add(s)
-        out.append(s)
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
     return out
 
 
-# ----------------------------
-# AI Extractability Score
-# ----------------------------
 def compute_extractability(
     html: str, soup: BeautifulSoup, text: str
 ) -> Tuple[int, str, List[str]]:
     reasons: List[str] = []
     score = 0
-
-    # Readable text depth
     text_len = len(text.strip())
+
     if text_len >= 1000:
         score += 20
-        reasons.append("✅ Rich readable text (1000+ chars)")
+        reasons.append("Rich readable text (1000+ chars)")
     elif text_len >= 400:
         score += 10
-        reasons.append("⚠️ Moderate text length")
+        reasons.append("Moderate text length")
     else:
-        reasons.append("❌ Thin text content")
+        reasons.append("Thin text content")
 
-    # Title tag
-    title_tag = soup.find("title")
-    if title_tag and title_tag.get_text(strip=True):
+    if soup.find("title") and soup.find("title").get_text(strip=True):
         score += 10
-        reasons.append("✅ Title tag present")
+        reasons.append("Title tag present")
     else:
-        reasons.append("❌ Missing title tag")
+        reasons.append("Missing title tag")
 
-    # H1
-    h1 = soup.find("h1")
-    if h1 and h1.get_text(strip=True):
+    if soup.find("h1") and soup.find("h1").get_text(strip=True):
         score += 10
-        reasons.append("✅ H1 tag present")
+        reasons.append("H1 tag present")
     else:
-        reasons.append("❌ Missing H1 tag")
+        reasons.append("Missing H1 tag")
 
-    # FAQ patterns
-    faq_keywords = ["faq", "frequently asked", "question", "answer"]
     lower_text = text.lower()
-    if any(kw in lower_text for kw in faq_keywords):
+    if any(kw in lower_text for kw in ["faq", "frequently asked", "question", "answer"]):
         score += 15
-        reasons.append("✅ FAQ-style content detected")
+        reasons.append("FAQ-style content detected")
     else:
-        reasons.append("⚠️ No FAQ patterns found")
+        reasons.append("No FAQ patterns found")
 
-    # Policy / about content
-    policy_keywords = ["privacy", "terms", "about us", "return policy", "shipping"]
-    if any(kw in lower_text for kw in policy_keywords):
+    if any(kw in lower_text for kw in ["privacy", "terms", "about us", "return policy", "shipping"]):
         score += 10
-        reasons.append("✅ Policy / trust content detected")
+        reasons.append("Policy/trust content detected")
     else:
-        reasons.append("⚠️ No policy content found")
+        reasons.append("No policy content found")
 
-    # Product signals
-    product_keywords = ["price", "buy", "add to cart", "checkout", "shop", "order"]
-    if any(kw in lower_text for kw in product_keywords):
+    if any(kw in lower_text for kw in ["price", "buy", "add to cart", "checkout", "shop", "order"]):
         score += 15
-        reasons.append("✅ Product / commerce signals found")
+        reasons.append("Product/commerce signals found")
     else:
-        reasons.append("⚠️ No product signals detected")
+        reasons.append("No product signals detected")
 
-    # Content depth (paragraphs)
-    paragraphs = soup.find_all("p")
-    if len(paragraphs) >= 5:
+    paras = soup.find_all("p")
+    if len(paras) >= 5:
         score += 10
-        reasons.append(f"✅ {len(paragraphs)} paragraph tags found")
+        reasons.append(f"{len(paras)} paragraph tags")
     else:
-        reasons.append(f"⚠️ Only {len(paragraphs)} paragraph tag(s)")
+        reasons.append(f"Only {len(paras)} paragraph tag(s)")
 
-    # Structured headings
     headings = soup.find_all(["h2", "h3"])
     if len(headings) >= 3:
         score += 10
-        reasons.append(f"✅ {len(headings)} sub-headings found")
+        reasons.append(f"{len(headings)} sub-headings")
     else:
-        reasons.append(f"⚠️ Only {len(headings)} sub-heading(s)")
+        reasons.append(f"Only {len(headings)} sub-heading(s)")
 
     score = min(100, score)
-
     if score >= 70:
         verdict = "High AI Extractability"
     elif score >= 40:
@@ -734,9 +1030,6 @@ def compute_extractability(
     return score, verdict, reasons
 
 
-# ----------------------------
-# Knowledge Graph Authority
-# ----------------------------
 def compute_authority(
     objs: List[Dict[str, Any]]
 ) -> Tuple[int, str, Dict[str, bool], List[str]]:
@@ -760,22 +1053,17 @@ def compute_authority(
                         authority_links.append(link)
 
     hits = sum(1 for v in authority_results.values() if v)
-    total = len(AUTHORITY_DOMAINS)
-    score = int((hits / total) * 100)
-
+    score = int((hits / len(AUTHORITY_DOMAINS)) * 100)
     if score >= 60:
-        verdict = "Strong Knowledge Graph Presence"
+        verdict = "Strong knowledge graph presence"
     elif score >= 30:
-        verdict = "Moderate Knowledge Graph Presence"
+        verdict = "Moderate knowledge graph presence"
     else:
-        verdict = "Weak Knowledge Graph Presence"
+        verdict = "Weak knowledge graph presence"
 
     return score, verdict, authority_results, authority_links
 
 
-# ----------------------------
-# Image Alt Scanner
-# ----------------------------
 def scan_images(soup: BeautifulSoup) -> Tuple[int, int, List[str]]:
     imgs = soup.find_all("img")
     total = len(imgs)
@@ -783,21 +1071,15 @@ def scan_images(soup: BeautifulSoup) -> Tuple[int, int, List[str]]:
     for img in imgs:
         alt = img.get("alt")
         if alt is None or (isinstance(alt, str) and not alt.strip()):
-            src = img.get("src", "")
-            missing.append(extract_filename_from_src(src))
+            missing.append(extract_filename_from_src(img.get("src", "")))
     return total, len(missing), missing[:5]
 
 
-# ----------------------------
-# AI Crawler Simulation
-# ----------------------------
-def simulate_ai_crawlers(
-    url: str, timeout: int
-) -> Dict[str, Dict[str, str]]:
+def simulate_ai_crawlers(url: str, timeout: int) -> Dict[str, Dict[str, str]]:
     results: Dict[str, Dict[str, str]] = {}
-    for crawler_name, ua in AI_CRAWLERS.items():
-        results[crawler_name] = fetch_with_ua(url, ua, timeout)
-        time.sleep(0.3)
+    for name, ua in AI_CRAWLERS.items():
+        results[name] = fetch_with_ua(url, ua, timeout)
+        time.sleep(0.25)
     return results
 
 
@@ -809,26 +1091,14 @@ def audit_page(url: str, brand: str, timeout: int) -> PageAudit:
 
     if err or not html:
         return PageAudit(
-            requested_url=url,
-            final_url=url,
-            ok_fetch=False,
-            fetch_error=err or "Empty response",
-            score=0,
-            org_found=False,
-            identity_verified=False,
-            faq_found=False,
-            product_found=False,
-            commerce_ready=False,
-            ghost=True,
-            text_len=0,
-            html_len=0,
-            semantic_density=0.0,
-            h1_text="",
-            h1_has_brand=False,
-            schema_types_found=set(),
-            extractability_score=0,
-            extractability_verdict="Low AI Extractability",
-            extractability_reasons=["❌ Page could not be fetched"],
+            requested_url=url, final_url=url, ok_fetch=False,
+            fetch_error=err or "Empty response", score=0,
+            org_found=False, identity_verified=False, faq_found=False,
+            product_found=False, commerce_ready=False, ghost=True,
+            text_len=0, html_len=0, semantic_density=0.0,
+            h1_text="", h1_has_brand=False, schema_types_found=set(),
+            extractability_score=0, extractability_verdict="Low AI Extractability",
+            extractability_reasons=["Page could not be fetched"],
         )
 
     soup = BeautifulSoup(html, "lxml")
@@ -852,37 +1122,21 @@ def audit_page(url: str, brand: str, timeout: int) -> PageAudit:
     commerce_ready = any(commerce_ok(p) for p in prod_objs) if prod_objs else False
 
     h1_text = extract_h1_text(soup)
-    h1_has_brand = brand_in_h1(brand, h1_text)
-
+    h1_has_brand_val = brand_in_h1(brand, h1_text)
     types_found = schema_types_set(objs)
     density = calc_semantic_density(text_len, html_len)
-
-    score = compute_score(
-        org_found, id_verified, faq_found, product_found, commerce_ready, ghost
-    )
-
+    score = compute_score(org_found, id_verified, faq_found, product_found, commerce_ready, ghost)
     ext_score, ext_verdict, ext_reasons = compute_extractability(html, soup, text)
 
     return PageAudit(
-        requested_url=url,
-        final_url=final_url or url,
-        ok_fetch=True,
-        fetch_error=None,
-        score=score,
-        org_found=org_found,
-        identity_verified=id_verified,
-        faq_found=faq_found,
-        product_found=product_found,
-        commerce_ready=commerce_ready,
-        ghost=ghost,
-        text_len=text_len,
-        html_len=html_len,
-        semantic_density=density,
-        h1_text=h1_text,
-        h1_has_brand=h1_has_brand,
-        schema_types_found=types_found,
-        extractability_score=ext_score,
-        extractability_verdict=ext_verdict,
+        requested_url=url, final_url=final_url or url, ok_fetch=True,
+        fetch_error=None, score=score, org_found=org_found,
+        identity_verified=id_verified, faq_found=faq_found,
+        product_found=product_found, commerce_ready=commerce_ready,
+        ghost=ghost, text_len=text_len, html_len=html_len,
+        semantic_density=density, h1_text=h1_text,
+        h1_has_brand=h1_has_brand_val, schema_types_found=types_found,
+        extractability_score=ext_score, extractability_verdict=ext_verdict,
         extractability_reasons=ext_reasons,
     )
 
@@ -894,119 +1148,135 @@ def run_site_audit(raw_url: str, timeout: int = DEFAULT_TIMEOUT) -> SiteAudit:
     origin = origin_from_url(raw_url)
     brand = infer_brand_name(origin)
 
-    homepage_url, product_urls, discovery_notes = discover_home_and_products(
-        origin, timeout
-    )
+    homepage_url, product_urls, discovery_notes = discover_home_and_products(origin, timeout)
     scan_urls = [homepage_url] + product_urls[:3]
 
     pages: List[PageAudit] = []
     for u in scan_urls:
         pages.append(audit_page(u, brand, timeout))
 
-    robots_ok, robots_txt, robots_err = check_robots(origin, timeout)
+    robots_ok, _, robots_err = check_robots(origin, timeout)
     llms_ok, llms_err = check_llms_txt(origin, timeout)
 
-    # Aggregate images from homepage
     _, home_html = fetch_text(homepage_url, timeout)
     home_soup = BeautifulSoup(home_html, "lxml") if home_html else BeautifulSoup("", "lxml")
-    img_total, img_missing_alt, img_missing_alt_examples = scan_images(home_soup)
+    img_total, img_missing_alt, img_examples = scan_images(home_soup)
 
-    # Org / sameAs
     all_objs: List[Dict[str, Any]] = []
     for p in pages:
         if p.ok_fetch:
             _, html, _ = safe_fetch_text(p.final_url, timeout)
             if html:
-                payloads = extract_jsonld_payloads(html)
-                all_objs.extend(flatten_jsonld_objects(payloads))
+                all_objs.extend(flatten_jsonld_objects(extract_jsonld_payloads(html)))
 
     org_present_any = any(
-        has_type(o, "organization") or has_type(o, "localbusiness")
-        for o in all_objs
+        has_type(o, "organization") or has_type(o, "localbusiness") for o in all_objs
     )
 
     sameas_social_links: List[str] = []
+    seen_s: Set[str] = set()
     for o in all_objs:
         if has_type(o, "organization") or has_type(o, "localbusiness"):
-            sameas_social_links.extend(extract_social_sameas(o))
+            for s in extract_social_sameas(o):
+                if s not in seen_s:
+                    seen_s.add(s)
+                    sameas_social_links.append(s)
 
-    seen: Set[str] = set()
-    unique_social: List[str] = []
-    for s in sameas_social_links:
-        if s not in seen:
-            seen.add(s)
-            unique_social.append(s)
-    sameas_social_links = unique_social
-
-    # AI crawlers (test homepage)
     ai_crawler_results = simulate_ai_crawlers(homepage_url, timeout)
-
-    # Authority
-    authority_score, authority_verdict, authority_results, authority_links = compute_authority(
-        all_objs
-    )
+    authority_score, authority_verdict, authority_results, authority_links = compute_authority(all_objs)
 
     return SiteAudit(
-        origin=origin,
-        brand=brand,
-        homepage_url=homepage_url,
-        scan_urls=scan_urls,
-        notes=discovery_notes,
-        pages=pages,
-        robots_accessible=robots_ok,
-        robots_error=robots_err,
-        llms_txt_present=llms_ok,
-        llms_txt_error=llms_err,
-        img_total=img_total,
-        img_missing_alt=img_missing_alt,
-        img_missing_alt_examples=img_missing_alt_examples,
-        org_present_any=org_present_any,
-        sameas_social_links=sameas_social_links,
+        origin=origin, brand=brand, homepage_url=homepage_url,
+        scan_urls=scan_urls, notes=discovery_notes, pages=pages,
+        robots_accessible=robots_ok, robots_error=robots_err,
+        llms_txt_present=llms_ok, llms_txt_error=llms_err,
+        img_total=img_total, img_missing_alt=img_missing_alt,
+        img_missing_alt_examples=img_examples,
+        org_present_any=org_present_any, sameas_social_links=sameas_social_links,
         ai_crawler_results=ai_crawler_results,
-        authority_score=authority_score,
-        authority_verdict=authority_verdict,
-        authority_results=authority_results,
-        authority_links=authority_links,
+        authority_score=authority_score, authority_verdict=authority_verdict,
+        authority_results=authority_results, authority_links=authority_links,
     )
 
 
 # ----------------------------
-# Score helpers for display
+# Claude API integration
 # ----------------------------
-def best_page_score(audit: SiteAudit) -> int:
-    if not audit.pages:
-        return 0
-    return max(p.score for p in audit.pages)
+def generate_ai_brief(audit: SiteAudit, competitor_audit: Optional[SiteAudit] = None) -> str:
+    if not ANTHROPIC_AVAILABLE:
+        return "Install the 'anthropic' package to enable AI-written fix briefs."
+
+    api_key = st.session_state.get("anthropic_api_key", "")
+    if not api_key:
+        return ""
+
+    hp = audit.pages[0] if audit.pages else None
+    if not hp:
+        return ""
+
+    missing_signals = []
+    if not hp.org_found:
+        missing_signals.append("Organization schema (missing entirely)")
+    elif not hp.identity_verified:
+        missing_signals.append("Identity verification (no sameAs or disambiguatingDescription)")
+    if not hp.faq_found:
+        missing_signals.append("FAQPage schema")
+    if not hp.product_found:
+        missing_signals.append("Product schema")
+    elif not hp.commerce_ready:
+        missing_signals.append("Offers/Price in Product schema")
+    if not audit.llms_txt_present:
+        missing_signals.append("llms.txt file")
+    if not audit.robots_accessible:
+        missing_signals.append("robots.txt accessibility")
+    if audit.img_missing_alt > 0:
+        missing_signals.append(f"Alt text on {audit.img_missing_alt} images")
+
+    competitor_context = ""
+    if competitor_audit:
+        comp_hp = competitor_audit.pages[0] if competitor_audit.pages else None
+        if comp_hp:
+            comp_score = max(p.score for p in competitor_audit.pages)
+            target_score = max(p.score for p in audit.pages)
+            gap = target_score - comp_score
+            competitor_context = f"""
+Competitor: {competitor_audit.brand} (score: {comp_score}/100)
+Score gap: {'+' if gap >= 0 else ''}{gap} points vs competitor
+Competitor has FAQPage: {comp_hp.faq_found}
+Competitor has Product schema: {comp_hp.product_found}
+Competitor has commerce-ready schema: {comp_hp.commerce_ready}
+"""
+
+    prompt = f"""You are an expert AEO (Answer Engine Optimization) consultant. Write a concise, actionable fix brief for this site audit.
+
+Site: {audit.brand} ({audit.origin})
+AEO Score: {max(p.score for p in audit.pages)}/100
+Ghost code detected: {hp.ghost}
+Semantic density: {hp.semantic_density:.1f}%
+AI extractability: {hp.extractability_score}/100 ({hp.extractability_verdict})
+Authority score: {audit.authority_score}/100 ({audit.authority_verdict})
+Missing signals: {', '.join(missing_signals) if missing_signals else 'None'}
+{competitor_context}
+
+Write a 3-paragraph brief:
+1. One-sentence overall diagnosis
+2. Top 3 specific fixes in priority order with exact implementation steps
+3. Expected score impact if fixes are implemented
+
+Be direct, technical, and specific. No fluff. Use plain text, no markdown symbols."""
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"API error: {str(e)}"
 
 
-def homepage_page(audit: SiteAudit) -> Optional[PageAudit]:
-    if not audit.pages:
-        return None
-    return audit.pages[0]
-
-
-# ----------------------------
-# UI rendering helpers
-# ----------------------------
-def render_check(label: str, ok: bool, detail: str = "") -> None:
-    icon = "✅" if ok else "❌"
-    if detail:
-        st.markdown(f"{icon} **{label}** — {detail}")
-    else:
-        st.markdown(f"{icon} **{label}**")
-
-
-def density_label(d: float) -> str:
-    if d < 5.0:
-        return f"{d:.1f}% — Bloated code"
-    if d < 10.0:
-        return f"{d:.1f}% — Weak semantic density"
-    return f"{d:.1f}% — Good"
-
-
-# ----------------------------
-# JSON-LD strategy snippet
-# ----------------------------
 def build_org_jsonld(brand: str, origin: str) -> str:
     return json.dumps(
         {
@@ -1014,7 +1284,7 @@ def build_org_jsonld(brand: str, origin: str) -> str:
             "@type": "Organization",
             "name": brand,
             "url": origin,
-            "disambiguatingDescription": f"{brand} — describe your brand in one sentence here.",
+            "disambiguatingDescription": f"{brand} — describe your brand here.",
             "sameAs": [
                 "https://www.linkedin.com/company/your-company",
                 "https://www.instagram.com/your-handle",
@@ -1029,27 +1299,46 @@ def build_org_jsonld(brand: str, origin: str) -> str:
 # Streamlit App
 # ----------------------------
 def main() -> None:
-    st.title("📈 Agentic Infrastructure Audit")
-    st.caption(
-        "Audit your website for AI search readiness — ChatGPT, Perplexity, Claude, Google AI Overviews."
-    )
+    st.markdown(PREMIUM_CSS, unsafe_allow_html=True)
+    st.markdown(hero_header(), unsafe_allow_html=True)
 
-    st.markdown("---")
-
-    col1, col2 = st.columns(2)
-    with col1:
+    # ── Input row ──
+    col_t, col_c, col_key = st.columns([2, 2, 1])
+    with col_t:
         target_input = st.text_input(
-            "🎯 Your URL", placeholder="https://yoursite.com", key="target"
+            "YOUR URL",
+            placeholder="https://yoursite.com",
+            key="target",
         )
-    with col2:
+    with col_c:
         competitor_input = st.text_input(
-            "🏁 Competitor URL (optional)", placeholder="https://competitor.com", key="competitor"
+            "COMPETITOR URL",
+            placeholder="https://competitor.com (optional)",
+            key="competitor",
         )
+    with col_key:
+        api_key_input = st.text_input(
+            "CLAUDE API KEY",
+            placeholder="sk-ant-...",
+            type="password",
+            key="api_key_field",
+        )
+        if api_key_input:
+            st.session_state["anthropic_api_key"] = api_key_input
 
-    run_btn = st.button("🚀 Run Audit", use_container_width=True, type="primary")
+    run_btn = st.button("Run Audit →", type="primary", key="run")
 
     if not run_btn:
-        st.info("Enter your URL above and click **Run Audit** to begin.")
+        st.markdown("""
+<div style="
+  margin-top:3rem; padding:3rem;
+  background:#0d1117; border:1px dashed #1a2332;
+  border-radius:16px; text-align:center;
+">
+  <div style="font-family:'DM Mono',monospace; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:#2e3c4e; margin-bottom:12px;">awaiting input</div>
+  <p style="font-family:'Syne',sans-serif; font-size:1.1rem; color:#4a6080;">Enter a URL above and run your audit.</p>
+</div>
+""", unsafe_allow_html=True)
         return
 
     target_url = ensure_scheme(target_input.strip())
@@ -1059,332 +1348,253 @@ def main() -> None:
 
     competitor_url = ensure_scheme(competitor_input.strip()) if competitor_input.strip() else None
 
-    # ----------------------------
-    # Run audits
-    # ----------------------------
-    with st.spinner("Crawling your site…"):
+    # ── Run audits ──
+    with st.spinner("Scanning your site…"):
         target_audit = run_site_audit(target_url)
 
     competitor_audit: Optional[SiteAudit] = None
     if competitor_url:
-        with st.spinner("Crawling competitor site…"):
+        with st.spinner("Scanning competitor…"):
             competitor_audit = run_site_audit(competitor_url)
 
-    target_score = best_page_score(target_audit)
-    competitor_score = best_page_score(competitor_audit) if competitor_audit else None
+    target_score = max(p.score for p in target_audit.pages) if target_audit.pages else 0
+    comp_score = max(p.score for p in competitor_audit.pages) if competitor_audit and competitor_audit.pages else None
+    hp = target_audit.pages[0] if target_audit.pages else None
 
-    # ----------------------------
+    # ═══════════════════════════════════
     # SECTION 1 — Scorecard
-    # ----------------------------
-    st.markdown("## 🏆 Agentic Score")
+    # ═══════════════════════════════════
+    st.markdown(section_header("Agentic Score", "Overall AI search readiness rating", "01 / scorecard"), unsafe_allow_html=True)
 
-    if competitor_audit:
-        gc1, gc2 = st.columns(2)
-        with gc1:
-            st.plotly_chart(
-                create_gauge(target_score, f"Your Score\n{target_audit.brand}"),
-                use_container_width=True,
-            )
-        with gc2:
-            st.plotly_chart(
-                create_gauge(competitor_score, f"Competitor\n{competitor_audit.brand}"),
-                use_container_width=True,
-            )
+    score_cols = st.columns([1, 1, 2] if competitor_audit else [1, 2])
+
+    with score_cols[0]:
+        st.markdown(score_card(target_score, "YOUR SCORE", target_audit.brand), unsafe_allow_html=True)
+
+    if competitor_audit and comp_score is not None:
+        with score_cols[1]:
+            st.markdown(score_card(comp_score, "COMPETITOR", competitor_audit.brand), unsafe_allow_html=True)
+        breakdown_col = score_cols[2]
     else:
-        g_col, _ = st.columns([1, 1])
-        with g_col:
-            st.plotly_chart(
-                create_gauge(target_score, f"Your Score\n{target_audit.brand}"),
-                use_container_width=True,
-            )
+        breakdown_col = score_cols[1]
 
-    delta = target_score - INDUSTRY_AVERAGE_SCORE
-    delta_str = f"+{delta}" if delta >= 0 else str(delta)
-    st.metric(
-        label="vs Industry Average",
-        value=f"{target_score}/100",
-        delta=f"{delta_str} pts vs avg ({INDUSTRY_AVERAGE_SCORE})",
-    )
-    style_metric_cards()
+    with breakdown_col:
+        st.markdown("""
+<div style="background:#0d1117; border:1px solid #1a2332; border-radius:16px; padding:24px 28px;">
+  <div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:#4a6080; margin-bottom:16px;">Signal Breakdown</div>
+""", unsafe_allow_html=True)
+        if hp:
+            st.markdown(signal_row("Organization Schema", 10 if hp.org_found else 0, 10), unsafe_allow_html=True)
+            st.markdown(signal_row("Identity Verification", 20 if hp.identity_verified else 0, 20), unsafe_allow_html=True)
+            st.markdown(signal_row("FAQPage Schema", 20 if hp.faq_found else 0, 20), unsafe_allow_html=True)
+            st.markdown(signal_row("Product Schema", 20 if hp.product_found else 0, 20), unsafe_allow_html=True)
+            st.markdown(signal_row("Offers / Price", 30 if hp.commerce_ready else 0, 30), unsafe_allow_html=True)
+        delta = target_score - INDUSTRY_AVERAGE_SCORE
+        delta_label = f"+{delta}" if delta >= 0 else str(delta)
+        delta_c = "#22d47a" if delta >= 0 else "#f0504a"
+        st.markdown(f"""
+  <div style="margin-top:16px; padding-top:16px; border-top:1px solid #111922;
+    display:flex; justify-content:space-between; align-items:center;">
+    <span style="font-family:'DM Mono',monospace; font-size:10px; color:#4a6080; text-transform:uppercase; letter-spacing:0.1em;">vs Industry avg ({INDUSTRY_AVERAGE_SCORE})</span>
+    <span style="font-family:'Syne',sans-serif; font-size:15px; font-weight:700; color:{delta_c};">{delta_label} pts</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-    # Score breakdown table
-    st.markdown("#### Score Breakdown")
-    hp = homepage_page(target_audit)
-    if hp:
-        breakdown_data = {
-            "Signal": [
-                "Organization Schema",
-                "Identity Verification",
-                "FAQPage Schema",
-                "Product Schema",
-                "Offers / Price",
-            ],
-            "Max Pts": [10, 20, 20, 20, 30],
-            "Earned": [
-                10 if hp.org_found else 0,
-                20 if hp.identity_verified else 0,
-                20 if hp.faq_found else 0,
-                20 if hp.product_found else 0,
-                30 if hp.commerce_ready else 0,
-            ],
-        }
-        rows = ""
-        for i in range(len(breakdown_data["Signal"])):
-            earned = breakdown_data["Earned"][i]
-            mx = breakdown_data["Max Pts"][i]
-            icon = "✅" if earned > 0 else "❌"
-            rows += f"| {icon} {breakdown_data['Signal'][i]} | {mx} | **{earned}** |\n"
-        st.markdown(
-            f"| Signal | Max | Earned |\n|---|---|---|\n{rows}"
-        )
+    # ═══════════════════════════════════
+    # SECTION 2 — AI Brief
+    # ═══════════════════════════════════
+    if st.session_state.get("anthropic_api_key"):
+        st.markdown(section_header("AI Fix Brief", "Claude-generated diagnosis and action plan", "02 / ai brief"), unsafe_allow_html=True)
+        with st.spinner("Generating AI brief…"):
+            brief = generate_ai_brief(target_audit, competitor_audit)
+        if brief:
+            st.markdown(ai_brief_card(brief), unsafe_allow_html=True)
+    else:
+        st.markdown(section_header("AI Fix Brief", "Add a Claude API key above to unlock AI-written diagnosis", "02 / ai brief"), unsafe_allow_html=True)
+        st.markdown("""
+<div style="background:#0d1117; border:1px dashed #1a2332; border-radius:12px; padding:20px 24px;">
+  <span style="font-family:'DM Mono',monospace; font-size:12px; color:#2e3c4e;">
+    Enter your Claude API key in the field above → instant AI-written fix brief per audit.<br>
+    Get your key at <a href="https://console.anthropic.com" style="color:#4a9eff;">console.anthropic.com</a>
+  </span>
+</div>
+""", unsafe_allow_html=True)
 
-    st.markdown("---")
+    # ═══════════════════════════════════
+    # SECTION 3 — Insight Grid
+    # ═══════════════════════════════════
+    st.markdown(section_header("Insight Grid", "Technical signal overview", "03 / signals"), unsafe_allow_html=True)
 
-    # ----------------------------
-    # SECTION 2 — Insight Grid
-    # ----------------------------
-    st.markdown("## 🔍 Insight Grid")
+    ig1, ig2, ig3, ig4 = st.columns(4)
 
-    ig1, ig2 = st.columns(2)
-    ig3, ig4 = st.columns(2)
-
-    # AI Access card
     with ig1:
-        st.markdown("**🤖 AI Access**")
-        if not target_audit.robots_accessible:
-            st.error(f"robots.txt: Not accessible")
+        if target_audit.robots_accessible and target_audit.llms_txt_present:
+            st.markdown(insight_card("⬡", "AI ACCESS", "Fully open", "ok", "robots.txt + llms.txt"), unsafe_allow_html=True)
+        elif target_audit.robots_accessible:
+            st.markdown(insight_card("⬡", "AI ACCESS", "Partial", "warn", "llms.txt missing"), unsafe_allow_html=True)
         else:
-            st.success("robots.txt: Accessible")
-        if not target_audit.llms_txt_present:
-            st.warning(
-                f"llms.txt: Missing — HIGH IMPACT. AI agents cannot find your content manifest."
-            )
-        else:
-            st.success("llms.txt: Present")
+            st.markdown(insight_card("⬡", "AI ACCESS", "Blocked", "err", "robots.txt inaccessible"), unsafe_allow_html=True)
 
-    # Visual Semantics card
     with ig2:
-        st.markdown("**🖼️ Visual Semantics**")
-        if target_audit.img_total == 0:
-            st.warning("No images found on homepage.")
-        elif target_audit.img_missing_alt == 0:
-            st.success(f"All {target_audit.img_total} images have alt text.")
+        if target_audit.img_missing_alt == 0 and target_audit.img_total > 0:
+            st.markdown(insight_card("◈", "IMAGE ALT", f"All {target_audit.img_total} tagged", "ok"), unsafe_allow_html=True)
+        elif target_audit.img_missing_alt > 0:
+            pct = int((target_audit.img_missing_alt / max(target_audit.img_total, 1)) * 100)
+            st.markdown(insight_card("◈", "IMAGE ALT", f"{pct}% missing", "warn", f"{target_audit.img_missing_alt}/{target_audit.img_total} images"), unsafe_allow_html=True)
         else:
-            pct = int((target_audit.img_missing_alt / target_audit.img_total) * 100)
-            st.warning(
-                f"{target_audit.img_missing_alt}/{target_audit.img_total} images missing alt ({pct}%)"
-            )
-        if target_audit.img_missing_alt_examples:
-            st.caption("Examples: " + ", ".join(target_audit.img_missing_alt_examples))
+            st.markdown(insight_card("◈", "IMAGE ALT", "No images", "info"), unsafe_allow_html=True)
 
-    # Semantic Density card
     with ig3:
-        st.markdown("**📊 Semantic Density**")
         if hp:
             d = hp.semantic_density
-            label = density_label(d)
-            if d < 5.0:
-                st.error(f"Density: {label}")
-            elif d < 10.0:
-                st.warning(f"Density: {label}")
+            if d >= 10:
+                st.markdown(insight_card("≋", "DENSITY", f"{d:.1f}%", "ok", "Good signal ratio"), unsafe_allow_html=True)
+            elif d >= 5:
+                st.markdown(insight_card("≋", "DENSITY", f"{d:.1f}%", "warn", "Weak signal ratio"), unsafe_allow_html=True)
             else:
-                st.success(f"Density: {label}")
-            if hp.ghost:
-                st.error("⚠️ Ghost Code Detected — JS render blocking. Score forced to 0.")
-        else:
-            st.warning("No homepage data.")
+                st.markdown(insight_card("≋", "DENSITY", f"{d:.1f}%", "err", "Bloated code"), unsafe_allow_html=True)
 
-    # Trust & Entity card
     with ig4:
-        st.markdown("**🏛️ Trust & Entity**")
-        if target_audit.org_present_any:
-            st.success("Organization schema: Found")
+        if target_audit.org_present_any and len(target_audit.sameas_social_links) >= 2:
+            st.markdown(insight_card("◎", "ENTITY", "Verified", "ok", f"{len(target_audit.sameas_social_links)} sameAs links"), unsafe_allow_html=True)
+        elif target_audit.org_present_any:
+            st.markdown(insight_card("◎", "ENTITY", "Partial", "warn", "No sameAs links"), unsafe_allow_html=True)
         else:
-            st.error("Organization schema: Missing")
-        if target_audit.sameas_social_links:
-            st.success(f"sameAs social links: {len(target_audit.sameas_social_links)} found")
-        else:
-            st.warning("sameAs social links: None found")
+            st.markdown(insight_card("◎", "ENTITY", "Not found", "err", "Organization schema missing"), unsafe_allow_html=True)
 
-    st.markdown("---")
+    # ═══════════════════════════════════
+    # SECTION 4 — AI Crawler Simulation
+    # ═══════════════════════════════════
+    st.markdown(section_header("AI Crawler Simulation", f"Access test against {target_audit.homepage_url}", "04 / crawlers"), unsafe_allow_html=True)
 
-    # ----------------------------
-    # SECTION 3 — AI Crawl Simulation
-    # ----------------------------
-    st.markdown("## 🕷️ AI Crawler Simulation")
-    st.caption(f"Testing access for: `{target_audit.homepage_url}`")
-
-    crawler_cols = st.columns(len(AI_CRAWLERS))
-    for idx, (crawler_name, result) in enumerate(
-        target_audit.ai_crawler_results.items()
-    ):
+    crawler_cols = st.columns(5)
+    for idx, (name, result) in enumerate(target_audit.ai_crawler_results.items()):
         with crawler_cols[idx]:
-            status = result.get("status", "Unknown")
-            code = result.get("code", "")
-            if status == "Accessible":
-                st.success(f"**{crawler_name}**\n\n{status}")
-            elif status == "Blocked":
-                st.error(f"**{crawler_name}**\n\n{status} ({code})")
-            elif status == "Thin Render":
-                st.warning(f"**{crawler_name}**\n\n{status}")
-            else:
-                st.warning(f"**{crawler_name}**\n\n{status}")
+            st.markdown(crawler_pill(name, result.get("status", "Unknown")), unsafe_allow_html=True)
 
-    st.markdown("---")
+    # ═══════════════════════════════════
+    # SECTION 5 — Authority
+    # ═══════════════════════════════════
+    st.markdown(section_header("Knowledge Graph Authority", target_audit.authority_verdict.capitalize(), "05 / authority"), unsafe_allow_html=True)
 
-    # ----------------------------
-    # SECTION 4 — Knowledge Graph Authority
-    # ----------------------------
-    st.markdown("## 🌐 Knowledge Graph Authority")
+    auth_left, auth_right = st.columns([1, 2])
+    with auth_left:
+        st.markdown(score_card(target_audit.authority_score, "AUTHORITY SCORE", "Knowledge graph"), unsafe_allow_html=True)
 
-    auth_g_col, auth_info_col = st.columns([1, 2])
-    with auth_g_col:
-        st.plotly_chart(
-            create_gauge(target_audit.authority_score, "Authority Score"),
-            use_container_width=True,
-        )
-    with auth_info_col:
-        st.markdown(f"**Verdict:** {target_audit.authority_verdict}")
-        st.markdown("**Authority Node Detection:**")
-        for node_name, found in target_audit.authority_results.items():
-            icon = "✅" if found else "❌"
-            st.markdown(f"{icon} {node_name}")
+    with auth_right:
+        st.markdown('<div style="display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start;">', unsafe_allow_html=True)
+        for name, found in target_audit.authority_results.items():
+            st.markdown(authority_node(name, found), unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
         if target_audit.authority_links:
-            st.markdown("**Detected sameAs links:**")
-            for link in target_audit.authority_links[:5]:
-                st.markdown(f"- [{link}]({link})")
+            st.markdown('<div style="margin-top:16px;">', unsafe_allow_html=True)
+            for link in target_audit.authority_links[:4]:
+                st.markdown(f'<a href="{link}" style="display:block; font-family:\'DM Mono\',monospace; font-size:11px; color:#4a9eff; text-decoration:none; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{link}</a>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-
-    # ----------------------------
-    # SECTION 5 — Detailed Page Analysis
-    # ----------------------------
-    st.markdown("## 📄 Detailed Page Analysis")
+    # ═══════════════════════════════════
+    # SECTION 6 — Page Analysis
+    # ═══════════════════════════════════
+    st.markdown(section_header("Page Analysis", "Per-page signal waterfall", "06 / pages"), unsafe_allow_html=True)
 
     for i, page in enumerate(target_audit.pages):
-        label = "🏠 Homepage" if i == 0 else f"📦 Product Page {i}"
-        with st.expander(f"{label} — `{page.requested_url}`", expanded=(i == 0)):
+        label = "Homepage" if i == 0 else f"Product Page {i}"
+        url_display = page.requested_url[:60] + ("…" if len(page.requested_url) > 60 else "")
+
+        with st.expander(f"{label}  ·  {url_display}", expanded=(i == 0)):
             if not page.ok_fetch:
-                st.error(f"Fetch failed: {page.fetch_error}")
+                st.markdown(f'<div style="font-family:\'DM Mono\',monospace; font-size:12px; color:#f0504a;">Fetch failed: {page.fetch_error}</div>', unsafe_allow_html=True)
                 continue
 
-            pc1, pc2 = st.columns(2)
-            with pc1:
-                st.metric("AEO Score", f"{page.score}/100")
-                render_check("Ghost Code", not page.ghost, "Clean render" if not page.ghost else "JS render blocking")
-                render_check("H1 Present", bool(page.h1_text), page.h1_text[:80] if page.h1_text else "Missing")
-                render_check("Brand in H1", page.h1_has_brand)
-                render_check("Organization Schema", page.org_found)
-                render_check("Identity Verified", page.identity_verified)
-                render_check("FAQPage Schema", page.faq_found)
-                render_check("Product Schema", page.product_found)
-                render_check("Offers / Price", page.commerce_ready)
+            pa1, pa2 = st.columns(2)
+            with pa1:
+                score_color = "#22d47a" if page.score >= 70 else "#f59e0b" if page.score >= 40 else "#f0504a"
+                st.markdown(f'<div style="font-family:\'Syne\',sans-serif; font-size:2rem; font-weight:800; color:{score_color}; margin-bottom:16px;">{page.score}<span style="font-size:1rem; color:#4a6080;">/100</span></div>', unsafe_allow_html=True)
+                st.markdown(page_audit_row("Ghost code clear", not page.ghost, "JS render blocking" if page.ghost else "Server-rendered"), unsafe_allow_html=True)
+                st.markdown(page_audit_row("H1 tag present", bool(page.h1_text), page.h1_text[:50] if page.h1_text else ""), unsafe_allow_html=True)
+                st.markdown(page_audit_row("Brand in H1", page.h1_has_brand), unsafe_allow_html=True)
+                st.markdown(page_audit_row("Organization schema", page.org_found), unsafe_allow_html=True)
+                st.markdown(page_audit_row("Identity verified", page.identity_verified), unsafe_allow_html=True)
+                st.markdown(page_audit_row("FAQPage schema", page.faq_found), unsafe_allow_html=True)
+                st.markdown(page_audit_row("Product schema", page.product_found), unsafe_allow_html=True)
+                st.markdown(page_audit_row("Offers / Price data", page.commerce_ready), unsafe_allow_html=True)
 
-            with pc2:
-                st.markdown(f"**Semantic Density:** {density_label(page.semantic_density)}")
-                st.markdown(
-                    f"**Text:** {page.text_len:,} chars / **HTML:** {page.html_len:,} chars"
-                )
-                if page.schema_types_found:
-                    types_display = ", ".join(sorted(page.schema_types_found)[:10])
-                    st.markdown(f"**Schema Types:** `{types_display}`")
-                else:
-                    st.markdown("**Schema Types:** None found")
+            with pa2:
+                st.markdown(f"""
+<div style="background:#060e1a; border:1px solid #1a2332; border-radius:10px; padding:18px; margin-bottom:12px;">
+  <div style="font-family:'DM Mono',monospace; font-size:10px; color:#4a6080; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:12px;">Technical Signals</div>
+  <div style="font-family:'DM Sans',sans-serif; font-size:13px; color:#8a95a3; line-height:2;">
+    Semantic density: <span style="color:#eef0f3;">{page.semantic_density:.1f}%</span><br>
+    Text length: <span style="color:#eef0f3;">{page.text_len:,}</span> chars<br>
+    HTML size: <span style="color:#eef0f3;">{page.html_len:,}</span> chars<br>
+    Extractability: <span style="color:#eef0f3;">{page.extractability_score}/100</span> — {page.extractability_verdict}<br>
+    Schema types: <span style="color:#eef0f3; font-family:'DM Mono',monospace; font-size:11px;">{', '.join(sorted(page.schema_types_found)[:6]) or 'none'}</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+                if page.extractability_reasons:
+                    st.markdown('<div style="font-family:\'DM Mono\',monospace; font-size:10px; color:#4a6080; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px;">Extractability signals</div>', unsafe_allow_html=True)
+                    for r in page.extractability_reasons[:6]:
+                        has_pass = not any(w in r.lower() for w in ["missing", "thin", "no ", "only 0", "only 1"])
+                        rc = "#22d47a" if has_pass else "#2e3c4e"
+                        st.markdown(f'<div style="font-family:\'DM Sans\',sans-serif; font-size:12px; color:{rc}; padding:3px 0;">{r}</div>', unsafe_allow_html=True)
 
-                st.markdown(
-                    f"**AI Extractability:** {page.extractability_score}/100 — *{page.extractability_verdict}*"
-                )
-                for reason in page.extractability_reasons:
-                    st.markdown(f"  {reason}")
+    # ═══════════════════════════════════
+    # SECTION 7 — Strategy
+    # ═══════════════════════════════════
+    st.markdown(section_header("Implementation Strategy", "Schema snippets and fix roadmap", "07 / strategy"), unsafe_allow_html=True)
 
-    st.markdown("---")
+    strat1, strat2 = st.columns(2)
 
-    # ----------------------------
-    # SECTION 6 — Strategy Section
-    # ----------------------------
-    st.markdown("## 🗺️ AI Readiness Strategy")
+    with strat1:
+        st.markdown("""
+<div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:#4a9eff; margin-bottom:10px;">Phase 1 — Entity Identity</div>
+<p style="font-family:'DM Sans',sans-serif; font-size:13px; color:#4a6080; margin-bottom:14px; line-height:1.6;">Add this JSON-LD block to the <code style="background:#111922; padding:1px 5px; border-radius:3px; font-size:11px;">&lt;head&gt;</code> of every page to establish your entity in the knowledge graph.</p>
+""", unsafe_allow_html=True)
+        st.code(build_org_jsonld(target_audit.brand, target_audit.origin), language="json")
 
-    st.markdown("### Phase 1 — Fix Entity Identity")
-    st.markdown(
-        "Your Organization schema is missing or incomplete. "
-        "Add this JSON-LD block to your `<head>` on every page:"
-    )
-    st.code(
-        build_org_jsonld(target_audit.brand, target_audit.origin),
-        language="json",
-    )
+    with strat2:
+        st.markdown("""
+<div style="font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:#4a9eff; margin-bottom:10px;">Phase 2 — AI Access Layer</div>
+""", unsafe_allow_html=True)
+        checks = [
+            ("llms.txt", target_audit.llms_txt_present, "Create at /llms.txt — maps your content for AI agents"),
+            ("robots.txt", target_audit.robots_accessible, "Ensure crawlers are not blocked"),
+            ("Image alt text", target_audit.img_missing_alt == 0, f"{target_audit.img_missing_alt} images need alt tags"),
+            ("Organization sameAs", len(target_audit.sameas_social_links) >= 2, "Link to Wikipedia, LinkedIn, etc."),
+        ]
+        for label, ok, tip in checks:
+            st.markdown(page_audit_row(label, ok, tip), unsafe_allow_html=True)
 
-    if not target_audit.llms_txt_present:
-        st.warning(
-            "⚠️ **llms.txt is missing.** Create `/llms.txt` at your domain root to "
-            "help AI agents discover and index your content. "
-            "See [llmstxt.org](https://llmstxt.org) for the spec."
+        if competitor_audit and comp_score is not None:
+            gap = target_score - comp_score
+            gap_c = "#22d47a" if gap >= 0 else "#f0504a"
+            gap_str = f"+{gap}" if gap >= 0 else str(gap)
+            st.markdown(f"""
+<div style="margin-top:20px; padding:16px; background:#0d1117; border:1px solid #1a2332; border-radius:10px;">
+  <div style="font-family:'DM Mono',monospace; font-size:10px; color:#4a6080; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px;">vs {competitor_audit.brand}</div>
+  <div style="font-family:'Syne',sans-serif; font-size:1.4rem; font-weight:700; color:{gap_c};">{gap_str} points</div>
+  <div style="font-family:'DM Sans',sans-serif; font-size:12px; color:#4a6080; margin-top:4px;">{"You lead the competitor." if gap >= 0 else "Close the gap with the fixes above."}</div>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown(cta_block(), unsafe_allow_html=True)
+
+    col_cta, _ = st.columns([1, 2])
+    with col_cta:
+        st.link_button(
+            "Book a Strategy Call →",
+            url="https://calendly.com/your-link",
+            use_container_width=True,
         )
 
-    if target_audit.img_missing_alt > 0:
-        st.warning(
-            f"⚠️ **{target_audit.img_missing_alt} images** are missing alt text. "
-            "Alt text is a primary signal for multimodal AI understanding."
-        )
-
-    st.markdown("### Phase 2 — Competitor Displacement Strategy")
-
-    if competitor_audit:
-        gap = target_score - competitor_score
-        if gap >= 0:
-            st.success(
-                f"✅ You are ahead of **{competitor_audit.brand}** by **{gap} points**. "
-                "Focus on maintaining your lead with richer FAQ and Product schema."
-            )
-        else:
-            st.error(
-                f"❌ **{competitor_audit.brand}** leads you by **{abs(gap)} points**. "
-                "Close the gap by implementing the missing schema signals above."
-            )
-
-        cc1, cc2 = st.columns(2)
-        comp_hp = homepage_page(competitor_audit)
-        with cc1:
-            st.markdown(f"**Your signals ({target_audit.brand})**")
-            if hp:
-                render_check("Organization Schema", hp.org_found)
-                render_check("Identity Verified", hp.identity_verified)
-                render_check("FAQPage Schema", hp.faq_found)
-                render_check("Product Schema", hp.product_found)
-                render_check("Offers / Price", hp.commerce_ready)
-        with cc2:
-            st.markdown(f"**Competitor signals ({competitor_audit.brand})**")
-            if comp_hp:
-                render_check("Organization Schema", comp_hp.org_found)
-                render_check("Identity Verified", comp_hp.identity_verified)
-                render_check("FAQPage Schema", comp_hp.faq_found)
-                render_check("Product Schema", comp_hp.product_found)
-                render_check("Offers / Price", comp_hp.commerce_ready)
-    else:
-        st.info(
-            "Add a competitor URL above to unlock competitor displacement analysis."
-        )
-
-    st.markdown("---")
-    st.markdown("### 📞 Ready to Accelerate?")
-    st.markdown(
-        "Get expert help implementing AI-ready schema, llms.txt, and "
-        "entity optimization for your brand."
-    )
-    st.link_button(
-        "📅 Book a Strategy Call",
-        url="https://calendly.com/your-link",
-        use_container_width=True,
-    )
-
-    # Discovery notes (collapsed)
-    with st.expander("🔧 Crawler Discovery Notes", expanded=False):
+    with st.expander("Crawler discovery log", expanded=False):
         for note in target_audit.notes:
-            st.caption(note)
+            st.markdown(f'<span style="font-family:\'DM Mono\',monospace; font-size:11px; color:#2e3c4e;">{note}</span>', unsafe_allow_html=True)
 
 
-# ----------------------------
-# Entry point
-# ----------------------------
 if __name__ == "__main__":
     main()
