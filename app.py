@@ -587,11 +587,28 @@ def extract_social_sameas(org_obj: Dict[str, Any]) -> List[str]:
 
     socials: List[str] = []
     for l in links:
+def extract_social_sameas(org_obj: Dict[str, Any]) -> List[str]:
+    same_as = org_obj.get("sameAs")
+    links: List[str] = []
+
+    if isinstance(same_as, str) and same_as.strip():
+        links = [same_as.strip()]
+    elif isinstance(same_as, list):
+        links = [x.strip() for x in same_as if isinstance(x, str) and x.strip()]
+
+    socials: List[str] = []
+    for l in links:
         h = urlparse(l).netloc.lower().replace("www.", "")
         if any(dom in h for dom in SOCIAL_DOMAINS):
             socials.append(l)
 
     seen: Set[str] = set()
     out: List[str] = []
+
     for s in socials:
         if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+
+    return out
