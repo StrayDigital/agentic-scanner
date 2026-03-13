@@ -236,8 +236,11 @@ def brand_in_h1(brand: str, h1_text: str) -> bool:
 # Networking
 # ----------------------------
 def fetch_text(url: str, timeout: int) -> Tuple[str, str]:
-    headers = {"User-Agent": USER_AGENT}
-
+headers = {
+    "User-Agent": USER_AGENT,
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml",
+}
     try:
         r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
 
