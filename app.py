@@ -237,9 +237,18 @@ def brand_in_h1(brand: str, h1_text: str) -> bool:
 # ----------------------------
 def fetch_text(url: str, timeout: int) -> Tuple[str, str]:
     headers = {"User-Agent": USER_AGENT}
-    r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
-    r.raise_for_status()
-    return r.url, r.text
+
+    try:
+        r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+
+        # Don't crash if the site blocks us
+        if r.status_code != 200:
+            return url, ""
+
+        return r.url, r.text
+
+    except requests.exceptions.RequestException:
+        return url, ""
 
 
 def safe_fetch_text(url: str, timeout: int) -> Tuple[Optional[str], Optional[str], Optional[str]]:
